@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — State Distribution</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+<nav>
+  <div class="nav-brand">💊 PharmTrack</div>
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('add') }}">+ Add</a>
+    <a href="{{ url_for('distribute') }}">📦 Distribute</a>
+    <a href="{{ url_for('states') }}" class="active">🗺️ States</a>
+    <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
+    <a href="{{ url_for('add_transfer') }}">➕ Transfer</a>
+    <a href="{{ url_for('api') }}" target="_blank">API</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-title">🗺️ State-wise Distribution</div>
+  <div class="page-sub">Medicine distribution across Indian states</div>
+
+  <div style="margin-bottom:20px;">
+    <a class="btn btn-primary" href="{{ url_for('distribute') }}">📦 New Distribution</a>
+  </div>
+
+  {% if state_map %}
+    {% for state, meds in state_map.items() %}
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-head">
+        <h3>📍 {{ state }}</h3>
+        <span class="mono" style="color:var(--muted);">{{ meds|length }} medicine(s)</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Medicine</th><th>Category</th>
+            <th>Qty Distributed</th><th>Distributed On</th>
+            <th>Expiry</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in meds %}
+          <tr>
+            <td><div class="name">{{ m.medicine_name }}</div></td>
+            <td style="color:var(--muted);font-size:12px;">{{ m.category }}</td>
+            <td class="mono">{{ m.quantity }}</td>
+            <td class="mono">{{ m.distributed_on }}</td>
+            <td class="mono">{{ m.expiry_date }}</td>
+            <td><span class="badge {{ m.status }}">{{ m.status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="card" style="padding:40px;text-align:center;color:var(--muted);">
+      No distributions recorded yet. <a href="{{ url_for('distribute') }}">Add one now!</a>
+    </div>
+  {% endif %}
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

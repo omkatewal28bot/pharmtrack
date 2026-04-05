@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — Distribute Medicine</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+<nav>
+  <div class="nav-brand">💊 PharmTrack</div>
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('add') }}">+ Add</a>
+    <a href="{{ url_for('distribute') }}" class="active">📦 Distribute</a>
+    <a href="{{ url_for('states') }}">🗺️ States</a>
+    <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
+    <a href="{{ url_for('add_transfer') }}">➕ Transfer</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-title">📦 Distribute Medicine</div>
+  <div class="page-sub">Assign medicine stock to an Indian state</div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="form-card">
+    <form method="POST">
+      <div class="form-grid">
+        <div class="fg full">
+          <label>Medicine *</label>
+          <select name="medicine_id" required>
+            <option value="">— Select Medicine —</option>
+            {% for m in medicines %}
+              <option value="{{ m.id }}">{{ m.name }} ({{ m.batch_number }}) — Stock: {{ m.quantity }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg full">
+          <label>State *</label>
+          <select name="state_name" required>
+            <option value="">— Select State —</option>
+            {% for s in ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+                         'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+                         'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+                         'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+                         'Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi'] %}
+              <option>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Quantity *</label>
+          <input type="number" name="quantity" min="1" placeholder="e.g. 100" required />
+        </div>
+        <div class="fg">
+          <label>Distribution Date *</label>
+          <input type="date" name="distributed_on" value="{{ today }}" required />
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">📦 Record Distribution</button>
+        <a class="btn btn-ghost" href="{{ url_for('states') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

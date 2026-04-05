@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — {{ action }} Medicine</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+<nav>
+  <div class="nav-brand">💊 PharmTrack</div>
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('add') }}" class="active">+ Add</a>
+    <a href="{{ url_for('distribute') }}">📦 Distribute</a>
+    <a href="{{ url_for('states') }}">🗺️ States</a>
+    <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
+    <a href="{{ url_for('add_transfer') }}">➕ Transfer</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-title">{{ action }} Medicine</div>
+  <div class="page-sub">{% if action == 'Add' %}Register a new medicine{% else %}Update medicine details{% endif %}</div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="form-card">
+    <form method="POST">
+      <div class="form-grid">
+        <div class="fg full">
+          <label>Medicine Name *</label>
+          <input type="text" name="name" value="{{ med.name if med else '' }}"
+                 placeholder="e.g. Paracetamol 500mg" required />
+        </div>
+        <div class="fg">
+          <label>Batch Number *</label>
+          <input type="text" name="batch" value="{{ med.batch_number if med else '' }}"
+                 placeholder="e.g. PCM-001" required />
+        </div>
+        <div class="fg">
+          <label>Category *</label>
+          <select name="category" required>
+            {% for cat in ['Analgesic','Antibiotic','Antidiabetic','Antihypertensive','Antacid',
+                           'Antihistamine','Cholesterol','Antiparasitic','Antiemetic','Supplement',
+                           'Respiratory','Antifungal','Neurological','Thyroid','Eye/Ear','Skin','Cardiac','Other'] %}
+              <option {% if med and med.category == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg full">
+          <label>Manufacturer *</label>
+          <input type="text" name="manufacturer" value="{{ med.manufacturer if med else '' }}"
+                 placeholder="e.g. Cipla, Sun Pharma" required />
+        </div>
+        <div class="fg">
+          <label>Manufacture Date *</label>
+          <input type="date" name="mfg" value="{{ med.manufacture_date if med else '' }}" required />
+        </div>
+        <div class="fg">
+          <label>Expiry Date *</label>
+          <input type="date" name="exp" value="{{ med.expiry_date if med else '' }}" required />
+        </div>
+        <div class="fg">
+          <label>Quantity</label>
+          <input type="number" name="qty" value="{{ med.quantity if med else 0 }}" min="0" />
+        </div>
+        <div class="fg">
+          <label>Unit Price (₹)</label>
+          <input type="number" name="price" value="{{ med.unit_price if med else 0 }}"
+                 min="0" step="0.01" />
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">
+          {% if action == 'Add' %}💾 Add Medicine{% else %}✅ Update{% endif %}
+        </button>
+        <a class="btn btn-ghost" href="{{ url_for('index') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

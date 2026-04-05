@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — New Transfer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+<nav>
+  <div class="nav-brand">💊 PharmTrack</div>
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('add') }}">+ Add</a>
+    <a href="{{ url_for('distribute') }}">📦 Distribute</a>
+    <a href="{{ url_for('states') }}">🗺️ States</a>
+    <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
+    <a href="{{ url_for('add_transfer') }}" class="active">➕ Transfer</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-title">➕ New Transfer</div>
+  <div class="page-sub">Record medicine movement between states</div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="form-card">
+    <form method="POST">
+      <div class="form-grid">
+        <div class="fg full">
+          <label>Medicine *</label>
+          <select name="medicine_id" required>
+            <option value="">— Select Medicine —</option>
+            {% for m in medicines %}
+              <option value="{{ m.id }}">{{ m.name }} ({{ m.batch_number }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>From State *</label>
+          <select name="from_state" required>
+            <option value="">— Select State —</option>
+            {% for s in ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+                         'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+                         'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+                         'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+                         'Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi'] %}
+              <option>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>To State *</label>
+          <select name="to_state" required>
+            <option value="">— Select State —</option>
+            {% for s in ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+                         'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+                         'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+                         'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+                         'Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi'] %}
+              <option>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Quantity *</label>
+          <input type="number" name="quantity" min="1" placeholder="e.g. 50" required />
+        </div>
+        <div class="fg">
+          <label>Transfer Date *</label>
+          <input type="date" name="transferred_on" value="{{ today }}" required />
+        </div>
+        <div class="fg full">
+          <label>Notes</label>
+          <input type="text" name="notes" placeholder="e.g. Emergency supply, surplus stock…" />
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">🔄 Record Transfer</button>
+        <a class="btn btn-ghost" href="{{ url_for('transfers') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
