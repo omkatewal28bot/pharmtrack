@@ -23,7 +23,6 @@ def get_db():
         cursorclass=MySQLdb.cursors.DictCursor
     )
 
-# ── Helpers ───────────────────────────────────────────────────
 def get_status(expiry_date):
     if isinstance(expiry_date, str):
         expiry_date = datetime.strptime(expiry_date, "%Y-%m-%d").date()
@@ -45,50 +44,39 @@ def enrich(med):
         med['added_on'] = str(med['added_on'])
     return med
 
-# ── Index / Dashboard ─────────────────────────────────────────
 @app.route('/')
 def index():
     db  = get_db()
     cur = db.cursor()
-
     cur.execute("SELECT * FROM medicines ORDER BY expiry_date ASC")
     meds = [enrich(m) for m in cur.fetchall()]
-
     cur.execute("""
         SELECT sd.state_name,
                COUNT(DISTINCT sd.medicine_id) AS medicine_count,
                SUM(sd.quantity) AS total_qty
         FROM state_distribution sd
         GROUP BY sd.state_name
-        ORDER BY total_qty DESC
-        LIMIT 8
+        ORDER BY total_qty DESC LIMIT 8
     """)
     states = cur.fetchall()
-
     cur.execute("""
         SELECT t.id, m.name AS medicine_name,
                t.from_state, t.to_state, t.quantity, t.transferred_on
         FROM transfers t
         JOIN medicines m ON t.medicine_id = m.id
-        ORDER BY t.transferred_on DESC
-        LIMIT 5
+        ORDER BY t.transferred_on DESC LIMIT 5
     """)
     recent_transfers = cur.fetchall()
     for t in recent_transfers:
         if isinstance(t.get('transferred_on'), (date, datetime)):
             t['transferred_on'] = str(t['transferred_on'])
-
-    cur.close()
-    db.close()
-
+    cur.close(); db.close()
     stats = {s: sum(1 for m in meds if m['status'] == s)
              for s in ['expired', 'critical', 'warning', 'safe']}
     stats['total'] = len(meds)
-
     return render_template('index.html', medicines=meds, stats=stats,
                            states=states, transfers=recent_transfers)
 
-# ── Add Medicine ──────────────────────────────────────────────
 @app.route('/add', methods=['GET', 'POST'])
 def add():
     if request.method == 'POST':
@@ -100,7 +88,6 @@ def add():
         exp          = request.form['exp']
         qty          = request.form['qty']
         price        = request.form.get('price', 0)
-
         errors = []
         if not name:         errors.append("Medicine name is required.")
         if not batch:        errors.append("Batch number is required.")
@@ -108,18 +95,14 @@ def add():
         try:
             mfg_d = datetime.strptime(mfg, "%Y-%m-%d").date()
             exp_d = datetime.strptime(exp, "%Y-%m-%d").date()
-            if exp_d <= mfg_d:
-                errors.append("Expiry date must be after manufacture date.")
-        except ValueError:
-            errors.append("Invalid date format.")
+            if exp_d <= mfg_d: errors.append("Expiry date must be after manufacture date.")
+        except ValueError: errors.append("Invalid date format.")
         try:
             if int(qty) < 0: errors.append("Quantity cannot be negative.")
         except ValueError:   errors.append("Quantity must be a number.")
-
         if errors:
             for e in errors: flash(e, 'error')
             return render_template('form.html', med=None, action='Add')
-
         db  = get_db()
         cur = db.cursor()
         cur.execute("SELECT id FROM medicines WHERE batch_number=%s", (batch,))
@@ -127,7 +110,6 @@ def add():
             flash(f"Batch number '{batch}' already exists.", 'error')
             cur.close(); db.close()
             return render_template('form.html', med=None, action='Add')
-
         cur.execute("""INSERT INTO medicines
                        (name, batch_number, category, manufacturer, manufacture_date, expiry_date, quantity, unit_price)
                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
@@ -136,10 +118,8 @@ def add():
         cur.close(); db.close()
         flash('Medicine added successfully!', 'success')
         return redirect(url_for('index'))
-
     return render_template('form.html', med=None, action='Add')
 
-# ── Edit Medicine ─────────────────────────────────────────────
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit(id):
     db  = get_db()
@@ -153,7 +133,6 @@ def edit(id):
         exp          = request.form['exp']
         qty          = request.form['qty']
         price        = request.form.get('price', 0)
-
         errors = []
         try:
             mfg_d = datetime.strptime(mfg, "%Y-%m-%d").date()
@@ -163,14 +142,12 @@ def edit(id):
         try:
             if int(qty) < 0: errors.append("Quantity cannot be negative.")
         except ValueError:   errors.append("Quantity must be a number.")
-
         if errors:
             for e in errors: flash(e, 'error')
             cur.execute("SELECT * FROM medicines WHERE id=%s", (id,))
             med = enrich(cur.fetchone())
             cur.close(); db.close()
             return render_template('form.html', med=med, action='Edit')
-
         cur.execute("SELECT id FROM medicines WHERE batch_number=%s AND id != %s", (batch, id))
         if cur.fetchone():
             flash(f"Batch number '{batch}' is used by another medicine.", 'error')
@@ -178,7 +155,6 @@ def edit(id):
             med = enrich(cur.fetchone())
             cur.close(); db.close()
             return render_template('form.html', med=med, action='Edit')
-
         cur.execute("""UPDATE medicines
                        SET name=%s, batch_number=%s, category=%s, manufacturer=%s,
                            manufacture_date=%s, expiry_date=%s, quantity=%s, unit_price=%s
@@ -188,7 +164,6 @@ def edit(id):
         cur.close(); db.close()
         flash('Medicine updated successfully!', 'success')
         return redirect(url_for('index'))
-
     cur.execute("SELECT * FROM medicines WHERE id=%s", (id,))
     row = cur.fetchone()
     cur.close(); db.close()
@@ -197,7 +172,6 @@ def edit(id):
         return redirect(url_for('index'))
     return render_template('form.html', med=enrich(row), action='Edit')
 
-# ── Delete Medicine ───────────────────────────────────────────
 @app.route('/delete/<int:id>', methods=['POST'])
 def delete(id):
     db  = get_db()
@@ -208,7 +182,6 @@ def delete(id):
     flash('Medicine deleted.', 'info')
     return redirect(url_for('index'))
 
-# ── States ────────────────────────────────────────────────────
 @app.route('/states')
 def states():
     db  = get_db()
@@ -222,7 +195,6 @@ def states():
     """)
     rows = cur.fetchall()
     cur.close(); db.close()
-
     state_map = {}
     for row in rows:
         if isinstance(row.get('expiry_date'), (date, datetime)):
@@ -231,10 +203,8 @@ def states():
             row['distributed_on'] = str(row['distributed_on'])
         _, row['status'] = get_status(row['expiry_date'])
         state_map.setdefault(row['state_name'], []).append(row)
-
     return render_template('states.html', state_map=state_map)
 
-# ── Distribute ────────────────────────────────────────────────
 @app.route('/distribute', methods=['GET', 'POST'])
 def distribute():
     db  = get_db()
@@ -244,18 +214,15 @@ def distribute():
         state_name  = request.form['state_name'].strip()
         quantity    = request.form['quantity']
         dist_date   = request.form['distributed_on']
-
         errors = []
         if not state_name: errors.append("State name is required.")
         try:
             if int(quantity) <= 0: errors.append("Quantity must be positive.")
         except ValueError: errors.append("Quantity must be a number.")
-
         cur.execute("SELECT quantity FROM medicines WHERE id=%s", (medicine_id,))
         med = cur.fetchone()
         if med and int(quantity) > med['quantity']:
             errors.append(f"Only {med['quantity']} units available.")
-
         if errors:
             for e in errors: flash(e, 'error')
         else:
@@ -266,13 +233,11 @@ def distribute():
             flash('Distribution recorded!', 'success')
             cur.close(); db.close()
             return redirect(url_for('states'))
-
     cur.execute("SELECT id, name, batch_number, quantity FROM medicines ORDER BY name")
     meds = cur.fetchall()
     cur.close(); db.close()
     return render_template('distribute.html', medicines=meds, today=str(date.today()))
 
-# ── Transfers ─────────────────────────────────────────────────
 @app.route('/transfers')
 def transfers():
     db  = get_db()
@@ -291,7 +256,6 @@ def transfers():
             t['transferred_on'] = str(t['transferred_on'])
     return render_template('transfers.html', transfers=rows)
 
-# ── Add Transfer ──────────────────────────────────────────────
 @app.route('/transfer/add', methods=['GET', 'POST'])
 def add_transfer():
     db  = get_db()
@@ -303,7 +267,6 @@ def add_transfer():
         quantity      = request.form['quantity']
         transfer_date = request.form['transferred_on']
         notes         = request.form.get('notes', '').strip()
-
         errors = []
         if not from_state: errors.append("From state is required.")
         if not to_state:   errors.append("To state is required.")
@@ -311,7 +274,6 @@ def add_transfer():
         try:
             if int(quantity) <= 0: errors.append("Quantity must be positive.")
         except ValueError: errors.append("Quantity must be a number.")
-
         if errors:
             for e in errors: flash(e, 'error')
         else:
@@ -322,13 +284,11 @@ def add_transfer():
             flash('Transfer recorded!', 'success')
             cur.close(); db.close()
             return redirect(url_for('transfers'))
-
     cur.execute("SELECT id, name, batch_number FROM medicines ORDER BY name")
     meds = cur.fetchall()
     cur.close(); db.close()
     return render_template('add_transfer.html', medicines=meds, today=str(date.today()))
 
-# ── API ───────────────────────────────────────────────────────
 @app.route('/api')
 def api():
     db  = get_db()
