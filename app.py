@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 import MySQLdb
+import MySQLdb.cursors
 from datetime import date, datetime
 import os
 
@@ -338,4 +339,4 @@ def api():
     return jsonify(meds)
 
 if __name__ == '__main__':
-    app.run(debug= True)
+    app.run(debug=True)
