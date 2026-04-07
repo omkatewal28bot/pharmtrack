@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — Usability</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+<nav>
+  <div class="nav-brand">💊 PharmTrack</div>
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('add') }}">+ Add</a>
+    <a href="{{ url_for('states') }}">🗺️ States</a>
+    <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
+    <a href="{{ url_for('usability') }}" class="active">🌡️ Usability</a>
+    <a href="{{ url_for('prediction') }}">📊 Prediction</a>
+    <a href="{{ url_for('knowledge') }}">📚 Knowledge</a>
+    <a href="{{ url_for('fifo') }}">📦 FIFO</a>
+  </div>
+</nav>
+<div class="container">
+  <div class="page-header">
+    <div class="page-title">🌡️ Usability Predictor</div>
+    <div class="page-sub">Predict medicine usability based on temperature, humidity & light</div>
+  </div>
+  <div class="form-card" style="max-width:100%;margin-bottom:24px;">
+    <form method="POST">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="fg">
+          <label>🌡️ Temperature (°C)</label>
+          <input type="number" name="temperature" value="{{ temp }}" min="-20" max="60" step="0.5" />
+        </div>
+        <div class="fg">
+          <label>💧 Humidity (%)</label>
+          <input type="number" name="humidity" value="{{ humidity }}" min="0" max="100" step="1" />
+        </div>
+        <div class="fg">
+          <label>💡 Light Exposure</label>
+          <select name="light_exposure">
+            <option value="no" {% if not light %}selected{% endif %}>No — Dark Storage</option>
+            <option value="yes" {% if light %}selected{% endif %}>Yes — Light Exposed</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">🔍 Predict Usability</button>
+      </div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Usability Results</h3></div>
+    <table>
+      <thead><tr><th>Medicine</th><th>Category</th><th>Expiry</th><th>Days Left</th><th>Usability Score</th><th>Grade</th><th>Warnings</th></tr></thead>
+      <tbody>
+        {% for r in results %}
+        <tr>
+          <td><div class="name">{{ r.name }}</div><div class="mono">{{ r.batch_number }}</div></td>
+          <td style="font-size:12px;color:var(--text2);">{{ r.info.icon }} {{ r.category }}</td>
+          <td class="mono">{{ r.expiry_date }}</td>
+          <td><span class="days {{ r.status }}">{% if r.days<0 %}{{ (r.days*-1) }}d ago{% else %}{{ r.days }}d{% endif %}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="background:var(--border);border-radius:4px;width:80px;height:6px;overflow:hidden;">
+                <div style="height:100%;width:{{ r.score }}%;background:{% if r.score>=80 %}var(--safe){% elif r.score>=60 %}var(--warning){% elif r.score>=30 %}var(--critical){% else %}var(--expired){% endif %};border-radius:4px;"></div>
+              </div>
+              <span class="mono">{{ r.score }}%</span>
+            </div>
+          </td>
+          <td><span class="badge {{ r.grade }}">{{ r.grade }}</span></td>
+          <td style="font-size:11px;color:var(--text2);">
+            {% for w in r.warnings %}<div>⚠️ {{ w }}</div>{% endfor %}
+            {% if not r.warnings %}<span style="color:var(--safe);">✅ All good</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

@@ -15,14 +15,19 @@
     <a href="{{ url_for('distribute') }}">📦 Distribute</a>
     <a href="{{ url_for('states') }}">🗺️ States</a>
     <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
-    <a href="{{ url_for('add_transfer') }}">➕ Transfer</a>
+    <a href="{{ url_for('usability') }}">🌡️ Usability</a>
+    <a href="{{ url_for('prediction') }}">📊 Prediction</a>
+    <a href="{{ url_for('knowledge') }}">📚 Knowledge</a>
+    <a href="{{ url_for('fifo') }}">📦 FIFO</a>
     <a href="{{ url_for('api') }}" target="_blank">API</a>
   </div>
 </nav>
 
 <div class="container">
-  <div class="page-title">Medicine Dashboard</div>
-  <div class="page-sub">Expiry prediction &amp; inventory overview — India</div>
+  <div class="page-header">
+    <div class="page-title">Medicine Dashboard</div>
+    <div class="page-sub">Expiry prediction & inventory overview — India</div>
+  </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
@@ -30,19 +35,39 @@
 
   <!-- Stats -->
   <div class="stats">
-    <div class="stat total">   <div class="lbl">Total</div>   <div class="val">{{ stats.total }}</div></div>
-    <div class="stat expired"> <div class="lbl">Expired</div> <div class="val">{{ stats.expired }}</div></div>
-    <div class="stat critical"><div class="lbl">Critical</div><div class="val">{{ stats.critical }}</div></div>
-    <div class="stat warning"> <div class="lbl">Warning</div> <div class="val">{{ stats.warning }}</div></div>
-    <div class="stat safe">    <div class="lbl">Safe</div>    <div class="val">{{ stats.safe }}</div></div>
+    <div class="stat total">
+      <div class="lbl">Total</div>
+      <div class="val">{{ stats.total }}</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:100%"></div></div>
+    </div>
+    <div class="stat expired">
+      <div class="lbl">Expired</div>
+      <div class="val">{{ stats.expired }}</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:{% if stats.total %}{{ (stats.expired/stats.total*100)|int }}{% else %}0{% endif %}%"></div></div>
+    </div>
+    <div class="stat critical">
+      <div class="lbl">Critical</div>
+      <div class="val">{{ stats.critical }}</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:{% if stats.total %}{{ (stats.critical/stats.total*100)|int }}{% else %}0{% endif %}%"></div></div>
+    </div>
+    <div class="stat warning">
+      <div class="lbl">Warning</div>
+      <div class="val">{{ stats.warning }}</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:{% if stats.total %}{{ (stats.warning/stats.total*100)|int }}{% else %}0{% endif %}%"></div></div>
+    </div>
+    <div class="stat safe">
+      <div class="lbl">Safe</div>
+      <div class="val">{{ stats.safe }}</div>
+      <div class="stat-bar"><div class="stat-bar-fill" style="width:{% if stats.total %}{{ (stats.safe/stats.total*100)|int }}{% else %}0{% endif %}%"></div></div>
+    </div>
   </div>
 
-  <!-- Two-col widgets -->
+  <!-- Two col -->
   <div class="two-col">
     <div class="card">
       <div class="card-head">
         <h3>🗺️ State-wise Distribution</h3>
-        <a class="btn btn-ghost btn-sm" href="{{ url_for('states') }}">View All</a>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('states') }}">View All →</a>
       </div>
       <table>
         <thead><tr><th>State</th><th>Medicines</th><th>Total Qty</th></tr></thead>
@@ -54,7 +79,7 @@
             <td class="mono">{{ s.total_qty }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted);">No distributions yet. <a href="{{ url_for('distribute') }}">Distribute now</a></td></tr>
+          <tr><td colspan="3"><div class="empty"><div class="empty-icon">🗺️</div><p>No distributions yet. <a href="{{ url_for('distribute') }}">Distribute now</a></p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -63,7 +88,7 @@
     <div class="card">
       <div class="card-head">
         <h3>🔄 Recent Transfers</h3>
-        <a class="btn btn-ghost btn-sm" href="{{ url_for('transfers') }}">View All</a>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('transfers') }}">View All →</a>
       </div>
       <table>
         <thead><tr><th>Medicine</th><th>From</th><th>To</th><th>Qty</th></tr></thead>
@@ -76,18 +101,18 @@
             <td class="mono">{{ t.quantity }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);">No transfers yet. <a href="{{ url_for('add_transfer') }}">Add one</a></td></tr>
+          <tr><td colspan="4"><div class="empty"><div class="empty-icon">🔄</div><p>No transfers yet. <a href="{{ url_for('add_transfer') }}">Add one</a></p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Full inventory -->
-  <div class="card" style="margin-top:20px;">
+  <!-- Inventory -->
+  <div class="card">
     <div class="card-head">
       <h3>🗃️ Inventory ({{ stats.total }} medicines)</h3>
-      <input type="text" id="search" placeholder="🔍 Search…" />
+      <input type="text" id="search" class="search-input" placeholder="🔍 Search medicines…" />
     </div>
     <table>
       <thead>
@@ -102,15 +127,15 @@
         <tr>
           <td class="mono">{{ m.id }}</td>
           <td><div class="name">{{ m.name }}</div></td>
-          <td style="font-size:11px;color:var(--muted);">{{ m.manufacturer }}</td>
+          <td style="font-size:12px;color:var(--muted);">{{ m.manufacturer }}</td>
           <td class="mono">{{ m.batch_number }}</td>
-          <td style="color:var(--muted);font-size:12px;">{{ m.category }}</td>
+          <td style="font-size:12px;color:var(--text2);">{{ m.category }}</td>
           <td class="mono">{{ m.expiry_date }}</td>
-          <td><span class="days {{ m.status }}">{% if m.days < 0 %}{{ (m.days * -1) }}d ago{% else %}{{ m.days }}d{% endif %}</span></td>
+          <td><span class="days {{ m.status }}">{% if m.days < 0 %}{{ (m.days*-1) }}d ago{% else %}{{ m.days }}d{% endif %}</span></td>
           <td class="mono">{{ m.quantity }}</td>
           <td class="mono">₹{{ m.unit_price }}</td>
           <td><span class="badge {{ m.status }}">{{ m.status }}</span></td>
-          <td>
+          <td style="display:flex;gap:6px;">
             <a class="btn btn-ghost btn-sm" href="{{ url_for('edit', id=m.id) }}">✏️</a>
             <form style="display:inline" method="POST" action="{{ url_for('delete', id=m.id) }}"
                   onsubmit="confirmDel(this);return false;">
@@ -119,15 +144,12 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">
-          No medicines found. <a href="{{ url_for('add') }}">Add one!</a>
-        </td></tr>
+        <tr><td colspan="11"><div class="empty"><div class="empty-icon">💊</div><p>No medicines found. <a href="{{ url_for('add') }}">Add one!</a></p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
-
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

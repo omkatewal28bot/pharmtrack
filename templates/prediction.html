@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — Prediction</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+<nav>
+  <div class="nav-brand">💊 PharmTrack</div>
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('add') }}">+ Add</a>
+    <a href="{{ url_for('states') }}">🗺️ States</a>
+    <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
+    <a href="{{ url_for('usability') }}">🌡️ Usability</a>
+    <a href="{{ url_for('prediction') }}" class="active">📊 Prediction</a>
+    <a href="{{ url_for('knowledge') }}">📚 Knowledge</a>
+    <a href="{{ url_for('fifo') }}">📦 FIFO</a>
+  </div>
+</nav>
+<div class="container">
+  <div class="page-header">
+    <div class="page-title">📊 Demand + Expiry Prediction</div>
+    <div class="page-sub">Combines sales data & expiry to predict stock risk</div>
+  </div>
+  <div class="stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+    <div class="stat expired"><div class="lbl">Expiry Risk</div><div class="val">{{ predictions|selectattr('risk_color','eq','critical')|list|length }}</div></div>
+    <div class="stat warning"><div class="lbl">Sell Soon</div><div class="val">{{ predictions|selectattr('risk','eq','Sell Soon')|list|length }}</div></div>
+    <div class="stat safe"><div class="lbl">On Track</div><div class="val">{{ predictions|selectattr('risk','eq','On Track')|list|length }}</div></div>
+    <div class="stat total"><div class="lbl">High Demand</div><div class="val">{{ predictions|selectattr('demand','eq','High')|list|length }}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Prediction Analysis</h3><input type="text" id="search" class="search-input" placeholder="🔍 Search…" /></div>
+    <table>
+      <thead><tr><th>Medicine</th><th>Category</th><th>Stock</th><th>Distributed</th><th>Demand</th><th>Days Left</th><th>Days to Sell</th><th>Risk</th></tr></thead>
+      <tbody>
+        {% for p in predictions %}
+        <tr>
+          <td><div class="name">{{ p.info.icon }} {{ p.name }}</div><div class="mono">{{ p.batch_number }}</div></td>
+          <td style="font-size:12px;color:var(--text2);">{{ p.category }}</td>
+          <td class="mono">{{ p.quantity }}</td>
+          <td class="mono">{{ p.distributed }}</td>
+          <td><span class="badge {% if p.demand=='High' %}safe{% elif p.demand=='Medium' %}warning{% else %}expired{% endif %}">{{ p.demand }}</span></td>
+          <td><span class="days {{ p.status }}">{% if p.days<0 %}{{ (p.days*-1) }}d ago{% else %}{{ p.days }}d{% endif %}</span></td>
+          <td class="mono">{% if p.days_to_sell=='N/A' %}No data{% else %}~{{ p.days_to_sell }}d{% endif %}</td>
+          <td><span class="badge {{ p.risk_color }}">{{ p.risk }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

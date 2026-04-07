@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — Knowledge</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    .knowledge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+    .k-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s;}
+    .k-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);}
+    .k-icon{font-size:32px;margin-bottom:10px;}
+    .k-title{font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;}
+    .k-use{font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6;}
+    .k-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:6px 0;border-bottom:1px solid var(--border);}
+    .k-row:last-child{border-bottom:none;}
+    .k-val{color:var(--accent);font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px;}
+    @media(max-width:900px){.knowledge-grid{grid-template-columns:repeat(2,1fr);}}
+    @media(max-width:600px){.knowledge-grid{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+<nav>
+  <div class="nav-brand">💊 PharmTrack</div>
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('add') }}">+ Add</a>
+    <a href="{{ url_for('states') }}">🗺️ States</a>
+    <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
+    <a href="{{ url_for('usability') }}">🌡️ Usability</a>
+    <a href="{{ url_for('prediction') }}">📊 Prediction</a>
+    <a href="{{ url_for('knowledge') }}" class="active">📚 Knowledge</a>
+    <a href="{{ url_for('fifo') }}">📦 FIFO</a>
+  </div>
+</nav>
+<div class="container">
+  <div class="page-header">
+    <div class="page-title">📚 Medicine Domain Knowledge</div>
+    <div class="page-sub">What each category treats + ideal storage conditions</div>
+  </div>
+  <div class="knowledge-grid">
+    {% for cat, info in medicine_info.items() %}
+    <div class="k-card">
+      <div class="k-icon">{{ info.icon }}</div>
+      <div class="k-title">{{ cat }}</div>
+      <div class="k-use">{{ info.use }}</div>
+      <div class="k-row"><span>🌡️ Temperature</span><span class="k-val">{{ info.temp }}</span></div>
+      <div class="k-row"><span>💧 Max Humidity</span><span class="k-val">{{ info.humidity }}</span></div>
+      <div class="k-row"><span>💡 Light</span><span class="k-val">{{ info.light }}</span></div>
+      {% if cat in cat_stats %}
+      <div class="k-row"><span>📦 In Inventory</span><span class="k-val">{{ cat_stats[cat].count }} items</span></div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

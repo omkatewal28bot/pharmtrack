@@ -1,15 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>PharmTrack — FIFO Batch Analysis</title>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmTrack — FIFO</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <style>
-    .fifo-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:800; }
-    .fifo-badge.first { background:rgba(63,185,80,.2); color:var(--safe); border:1px solid rgba(63,185,80,.4); }
-    .fifo-badge.next  { background:rgba(88,166,255,.1); color:var(--accent); border:1px solid rgba(88,166,255,.3); }
-    .sell-first-row { background: rgba(63,185,80,0.05) !important; }
+    .sell-first-row{background:var(--safe-light)!important;}
+    .fifo-first{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800;background:var(--safe-light);color:var(--safe);border:1px solid #86efac;}
+    .fifo-next{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:var(--accent-light);color:var(--accent);border:1px solid #93c5fd;}
   </style>
 </head>
 <body>
@@ -27,18 +25,16 @@
   </div>
 </nav>
 <div class="container">
-  <div class="page-title">📦 FIFO Batch Analysis</div>
-  <div class="page-sub">First In First Out — which batch to sell first</div>
-
-  <div class="card" style="margin-bottom:20px;padding:20px;">
-    <h3 style="margin-bottom:10px;">What is FIFO?</h3>
-    <p style="color:var(--muted);font-size:13px;line-height:1.6;">
-      <strong style="color:var(--safe);">FIFO = First In, First Out</strong> — The oldest batch (earliest expiry) should be sold first.
-      This prevents medicine waste and ensures patients always get the freshest stock available.
-      Rows highlighted in <span style="color:var(--safe);">green</span> should be sold/distributed immediately.
+  <div class="page-header">
+    <div class="page-title">📦 FIFO Batch Analysis</div>
+    <div class="page-sub">First In First Out — sell oldest batch first to avoid waste</div>
+  </div>
+  <div class="card" style="margin-bottom:20px;padding:20px 24px;">
+    <p style="font-size:13px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--safe);">FIFO = First In, First Out</strong> — Always sell the batch with the earliest expiry date first.
+      Rows highlighted in <span style="color:var(--safe);font-weight:700;">green</span> must be distributed immediately.
     </p>
   </div>
-
   {% for name, batch_group in batches.items() %}
   <div class="card" style="margin-bottom:20px;">
     <div class="card-head">
@@ -46,44 +42,26 @@
       <span class="mono" style="color:var(--muted);">{{ batch_group|length }} batch(es)</span>
     </div>
     <table>
-      <thead>
-        <tr><th>FIFO Order</th><th>Batch No.</th><th>Manufacturer</th><th>Mfg Date</th><th>Expiry</th><th>Days Left</th><th>Qty</th><th>Action</th></tr>
-      </thead>
+      <thead><tr><th>Priority</th><th>Batch No.</th><th>Manufacturer</th><th>Mfg Date</th><th>Expiry</th><th>Days Left</th><th>Qty</th><th>Action</th></tr></thead>
       <tbody>
         {% for b in batch_group|sort(attribute='expiry_date') %}
         <tr {% if b.sell_first %}class="sell-first-row"{% endif %}>
-          <td>
-            {% if b.sell_first %}
-              <span class="fifo-badge first">🥇 SELL FIRST</span>
-            {% else %}
-              <span class="fifo-badge next">#{{ b.fifo_order }}</span>
-            {% endif %}
-          </td>
+          <td>{% if b.sell_first %}<span class="fifo-first">🥇 Sell First</span>{% else %}<span class="fifo-next">#{{ b.fifo_order }}</span>{% endif %}</td>
           <td class="mono">{{ b.batch_number }}</td>
-          <td style="font-size:12px;color:var(--muted);">{{ b.manufacturer }}</td>
+          <td style="font-size:12px;color:var(--text2);">{{ b.manufacturer }}</td>
           <td class="mono">{{ b.manufacture_date }}</td>
           <td class="mono">{{ b.expiry_date }}</td>
           <td><span class="days {{ b.status }}">{% if b.days<0 %}{{ (b.days*-1) }}d ago{% else %}{{ b.days }}d{% endif %}</span></td>
           <td class="mono">{{ b.quantity }}</td>
-          <td>
-            {% if b.sell_first %}
-              <span style="color:var(--safe);font-size:12px;font-weight:700;">⚡ Distribute Now</span>
-            {% else %}
-              <span style="color:var(--muted);font-size:12px;">Wait</span>
-            {% endif %}
-          </td>
+          <td>{% if b.sell_first %}<span style="color:var(--safe);font-size:12px;font-weight:700;">⚡ Distribute Now</span>{% else %}<span style="color:var(--muted);font-size:12px;">Hold</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% else %}
+  <div class="card"><div class="empty"><div class="empty-icon">📦</div><p>No medicines in stock. <a href="{{ url_for('add') }}">Add medicines first!</a></p></div></div>
   {% endfor %}
-
-  {% if not batches %}
-  <div class="card" style="padding:40px;text-align:center;color:var(--muted);">
-    No medicines in stock. <a href="{{ url_for('add') }}">Add medicines first!</a>
-  </div>
-  {% endif %}
 </div>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
