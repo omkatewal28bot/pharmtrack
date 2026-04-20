@@ -20,8 +20,7 @@ def get_db():
         user=MYSQL_USER,
         passwd=MYSQL_PASSWORD,
         db=MYSQL_DB,
-        cursorclass=MySQLdb.cursors.DictCursor,
-        ssl={'ssl_mode': 'REQUIRED'}
+        cursorclass=MySQLdb.cursors.DictCursor
     )
 # ── Domain Knowledge ──────────────────────────────────────────
 MEDICINE_INFO = {
