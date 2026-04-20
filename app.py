@@ -16,13 +16,13 @@ MYSQL_DB       = os.environ.get('MYSQL_DB', 'sql8822192')
 def get_db():
     return MySQLdb.connect(
         host=MYSQL_HOST,
-        port=MYSQL_PORT,
+        port=int(MYSQL_PORT),
         user=MYSQL_USER,
         passwd=MYSQL_PASSWORD,
         db=MYSQL_DB,
-        cursorclass=MySQLdb.cursors.DictCursor
+        cursorclass=MySQLdb.cursors.DictCursor,
+        ssl={'ssl_mode': 'REQUIRED'}
     )
-
 # ── Domain Knowledge ──────────────────────────────────────────
 MEDICINE_INFO = {
     'Analgesic':        {'use': 'Pain relief — headache, fever, body pain', 'icon': '💊', 'temp': '15-25°C', 'humidity': '<60%', 'light': 'Avoid direct sunlight'},

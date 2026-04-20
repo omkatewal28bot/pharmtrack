@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>PharmTrack — New Transfer</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
@@ -15,20 +14,20 @@
     <a href="{{ url_for('distribute') }}">📦 Distribute</a>
     <a href="{{ url_for('states') }}">🗺️ States</a>
     <a href="{{ url_for('transfers') }}">🔄 Transfers</a>
-    <a href="{{ url_for('add_transfer') }}" class="active">➕ Transfer</a>
+    <a href="{{ url_for('usability') }}">🌡️ Usability</a>
+    <a href="{{ url_for('prediction') }}">📊 Prediction</a>
+    <a href="{{ url_for('knowledge') }}">📚 Knowledge</a>
+    <a href="{{ url_for('fifo') }}">📦 FIFO</a>
   </div>
 </nav>
-
 <div class="container">
-  <div class="page-title">➕ New Transfer</div>
-  <div class="page-sub">Record medicine movement between states</div>
-
+  <div class="page-header">
+    <div class="page-title">➕ New Transfer</div>
+    <div class="page-sub">Record medicine movement between states</div>
+  </div>
   {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}
-      <div class="flash {{ cat }}">{{ msg }}</div>
-    {% endfor %}
+    {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
   {% endwith %}
-
   <div class="form-card">
     <form method="POST">
       <div class="form-grid">
@@ -44,12 +43,8 @@
         <div class="fg">
           <label>From State *</label>
           <select name="from_state" required>
-            <option value="">— Select State —</option>
-            {% for s in ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
-                         'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
-                         'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
-                         'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
-                         'Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi'] %}
+            <option value="">— Select —</option>
+            {% for s in ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi'] %}
               <option>{{ s }}</option>
             {% endfor %}
           </select>
@@ -57,12 +52,8 @@
         <div class="fg">
           <label>To State *</label>
           <select name="to_state" required>
-            <option value="">— Select State —</option>
-            {% for s in ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
-                         'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
-                         'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
-                         'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
-                         'Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi'] %}
+            <option value="">— Select —</option>
+            {% for s in ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi'] %}
               <option>{{ s }}</option>
             {% endfor %}
           </select>
@@ -87,7 +78,6 @@
     </form>
   </div>
 </div>
-
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
