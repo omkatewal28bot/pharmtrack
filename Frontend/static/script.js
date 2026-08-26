@@ -3,32 +3,35 @@
 // MongoDB Atlas + Flask Backend
 // ==========================================
 
-// ==========================================
-// BACKEND URL
-// ==========================================
-
 const API_BASE_URL = "https://pharmtrack-2.onrender.com";
 
 
 // ==========================================
-// API HELPER
+// API REQUEST HELPER
 // ==========================================
 
 async function apiRequest(endpoint, options = {}) {
 
     const url = `${API_BASE_URL}${endpoint}`;
 
-    console.log("API Request:", url);
+    console.log("➡️ API Request:", url);
 
     try {
 
         const response = await fetch(url, {
-            ...options,
+            method: options.method || "GET",
             headers: {
                 "Content-Type": "application/json",
                 ...(options.headers || {})
-            }
+            },
+            body: options.body
         });
+
+        console.log(
+            "⬅️ API Status:",
+            response.status,
+            response.statusText
+        );
 
         const contentType =
             response.headers.get("content-type") || "";
@@ -36,38 +39,32 @@ async function apiRequest(endpoint, options = {}) {
         let data;
 
         if (contentType.includes("application/json")) {
-
             data = await response.json();
-
         } else {
-
             const text = await response.text();
 
             data = {
                 success: false,
-                message: text || "Server returned a non-JSON response"
+                message: text || "Server returned non-JSON response"
             };
         }
 
-
-        console.log("API Response:", endpoint, data);
-
+        console.log("📦 API Response:", endpoint, data);
 
         if (!response.ok) {
 
             throw new Error(
                 data.message ||
-                `Request failed with status ${response.status}`
+                `HTTP ${response.status}`
             );
         }
-
 
         return data;
 
     } catch (error) {
 
         console.error(
-            `API Error [${endpoint}]:`,
+            `❌ API Error [${endpoint}]:`,
             error
         );
 
@@ -77,66 +74,482 @@ async function apiRequest(endpoint, options = {}) {
 
 
 // ==========================================
+// SAFE TEXT
+// ==========================================
+
+function setText(id, value) {
+
+    const element = document.getElementById(id);
+
+    if (!element) {
+        console.warn(`Element #${id} not found`);
+        return;
+    }
+
+    element.textContent = value;
+}
+
+
+// ==========================================
+// HTML SECURITY
+// ==========================================
+
+function escapeHTML(value) {
+
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+// ==========================================
+// DATE FORMAT
+// ==========================================
+
+function formatDate(value) {
+
+    if (!value) {
+        return "";
+    }
+
+    // MongoDB date object
+    if (
+        typeof value === "object" &&
+        value.$date
+    ) {
+        value = value.$date;
+    }
+
+    const parsed = new Date(value);
+
+    if (isNaN(parsed.getTime())) {
+        return String(value);
+    }
+
+    return parsed
+        .toISOString()
+        .split("T")[0];
+}
+
+
+// ==========================================
+// PROGRESS BAR
+// ==========================================
+
+function updateBar(id, value, total) {
+
+    const bar = document.getElementById(id);
+
+    if (!bar) {
+        return;
+    }
+
+    value = Number(value) || 0;
+    total = Number(total) || 0;
+
+    if (total <= 0) {
+        bar.style.width = "0%";
+        return;
+    }
+
+    const percentage = Math.min(
+        100,
+        Math.round((value / total) * 100)
+    );
+
+    bar.style.width = `${percentage}%`;
+}
+
+
+// ==========================================
+// TABLE ERROR
+// ==========================================
+
+function showTableError(
+    tableId,
+    colspan,
+    title,
+    message
+) {
+
+    const table = document.getElementById(tableId);
+
+    if (!table) {
+        return;
+    }
+
+    table.innerHTML = `
+        <tr>
+            <td colspan="${colspan}">
+                <div class="empty">
+                    <div class="empty-icon">⚠️</div>
+
+                    <p>${escapeHTML(title)}</p>
+
+                    <small
+                        style="
+                            display:block;
+                            margin-top:6px;
+                            color:var(--muted);
+                        "
+                    >
+                        ${escapeHTML(message)}
+                    </small>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+
+// ==========================================
+// MEDICINES TABLE
+// ==========================================
+
+function loadMedicines(medicines) {
+
+    const table =
+        document.getElementById("medicineTable");
+
+    if (!table) {
+        console.warn("#medicineTable not found");
+        return;
+    }
+
+    if (
+        !Array.isArray(medicines) ||
+        medicines.length === 0
+    ) {
+
+        table.innerHTML = `
+            <tr>
+                <td colspan="11">
+                    <div class="empty">
+                        <div class="empty-icon">💊</div>
+                        <p>No medicines found.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    table.innerHTML = medicines.map(m => {
+
+        const id =
+            m.id ??
+            m._id ??
+            "";
+
+        const days =
+            Number(m.days ?? 0);
+
+        const daysText =
+            days < 0
+                ? `${Math.abs(days)}d ago`
+                : `${days}d`;
+
+        const status =
+            String(
+                m.status || "safe"
+            ).toLowerCase();
+
+        const quantity =
+            m.quantity ?? 0;
+
+        const price =
+            m.unit_price ??
+            m.price ??
+            0;
+
+        return `
+            <tr>
+
+                <td class="mono">
+                    ${escapeHTML(id)}
+                </td>
+
+                <td>
+                    <div class="name">
+                        ${escapeHTML(m.name || "")}
+                    </div>
+                </td>
+
+                <td style="
+                    font-size:12px;
+                    color:var(--muted);
+                ">
+                    ${escapeHTML(m.manufacturer || "")}
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(m.batch_number || "")}
+                </td>
+
+                <td style="
+                    font-size:12px;
+                    color:var(--text2);
+                ">
+                    ${escapeHTML(m.category || "")}
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(
+                        formatDate(m.expiry_date)
+                    )}
+                </td>
+
+                <td>
+                    <span class="days ${escapeHTML(status)}">
+                        ${escapeHTML(daysText)}
+                    </span>
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(quantity)}
+                </td>
+
+                <td class="mono">
+                    ₹${escapeHTML(price)}
+                </td>
+
+                <td>
+                    <span class="badge ${escapeHTML(status)}">
+                        ${escapeHTML(status)}
+                    </span>
+                </td>
+
+                <td>
+                    <div style="
+                        display:flex;
+                        gap:6px;
+                    ">
+
+                        <button
+                            class="btn btn-ghost btn-sm"
+                            onclick="editMedicine('${escapeHTML(id)}')"
+                            title="Edit"
+                        >
+                            ✏️
+                        </button>
+
+                        <button
+                            class="btn btn-danger btn-sm"
+                            onclick="deleteMedicine('${escapeHTML(id)}')"
+                            title="Delete"
+                        >
+                            🗑️
+                        </button>
+
+                    </div>
+                </td>
+
+            </tr>
+        `;
+
+    }).join("");
+}
+
+
+// ==========================================
+// STATES TABLE
+// ==========================================
+
+function loadStates(states) {
+
+    const table =
+        document.getElementById("stateTable");
+
+    if (!table) {
+        return;
+    }
+
+    if (
+        !Array.isArray(states) ||
+        states.length === 0
+    ) {
+
+        table.innerHTML = `
+            <tr>
+                <td colspan="3">
+                    <div class="empty">
+                        <div class="empty-icon">🗺️</div>
+                        <p>No distributions yet.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    table.innerHTML = states.map(s => {
+
+        return `
+            <tr>
+
+                <td>
+                    <div class="name">
+                        ${escapeHTML(
+                            s.state_name || ""
+                        )}
+                    </div>
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(
+                        s.medicine_count ?? 0
+                    )}
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(
+                        s.total_qty ?? 0
+                    )}
+                </td>
+
+            </tr>
+        `;
+
+    }).join("");
+}
+
+
+// ==========================================
+// TRANSFERS TABLE
+// ==========================================
+
+function loadTransfers(transfers) {
+
+    const table =
+        document.getElementById("transferTable");
+
+    if (!table) {
+        return;
+    }
+
+    if (
+        !Array.isArray(transfers) ||
+        transfers.length === 0
+    ) {
+
+        table.innerHTML = `
+            <tr>
+                <td colspan="4">
+                    <div class="empty">
+                        <div class="empty-icon">🔄</div>
+                        <p>No transfers yet.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    table.innerHTML = transfers.map(t => {
+
+        return `
+            <tr>
+
+                <td>
+                    <div
+                        class="name"
+                        style="font-size:12px;"
+                    >
+                        ${escapeHTML(
+                            t.medicine_name || ""
+                        )}
+                    </div>
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(
+                        t.from_state || ""
+                    )}
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(
+                        t.to_state || ""
+                    )}
+                </td>
+
+                <td class="mono">
+                    ${escapeHTML(
+                        t.quantity ?? 0
+                    )}
+                </td>
+
+            </tr>
+        `;
+
+    }).join("");
+}
+
+
+// ==========================================
 // DASHBOARD
 // ==========================================
 
 async function loadDashboard() {
 
+    console.log("📊 Loading dashboard...");
+
     const medicineTable =
         document.getElementById("medicineTable");
 
-    const stateTable =
-        document.getElementById("stateTable");
+    if (medicineTable) {
 
-    const transferTable =
-        document.getElementById("transferTable");
-
+        medicineTable.innerHTML = `
+            <tr>
+                <td colspan="11">
+                    <div class="empty">
+                        <div class="empty-icon">⏳</div>
+                        <p>Loading medicines...</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
 
     try {
-
-        if (medicineTable) {
-
-            medicineTable.innerHTML = `
-                <tr>
-                    <td colspan="11">
-                        <div class="empty">
-                            <div class="empty-icon">⏳</div>
-                            <p>Loading medicines...</p>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }
-
 
         const data =
             await apiRequest("/api/dashboard");
 
-
         console.log(
-            "Dashboard loaded successfully:",
+            "✅ Dashboard response:",
             data
         );
 
-
-        // ======================================
-        // CHECK RESPONSE
-        // ======================================
-
-        if (!data.success) {
-
+        if (!data) {
             throw new Error(
-                data.message ||
-                "Dashboard request failed"
+                "Empty response from backend"
             );
         }
 
+        if (data.success !== true) {
+            throw new Error(
+                data.message ||
+                "Dashboard API returned an error"
+            );
+        }
 
         // ======================================
         // STATS
         // ======================================
 
-        const stats = data.stats || {};
+        const stats =
+            data.stats || {};
 
         const total =
             Number(stats.total) || 0;
@@ -153,14 +566,12 @@ async function loadDashboard() {
         const safe =
             Number(stats.safe) || 0;
 
-
         setText("total", total);
         setText("expired", expired);
         setText("critical", critical);
         setText("warning", warning);
         setText("safe", safe);
         setText("inventoryCount", total);
-
 
         // ======================================
         // PROGRESS BARS
@@ -190,9 +601,8 @@ async function loadDashboard() {
             total
         );
 
-
         // ======================================
-        // TABLES
+        // TABLE DATA
         // ======================================
 
         loadMedicines(
@@ -201,13 +611,11 @@ async function loadDashboard() {
                 : []
         );
 
-
         loadStates(
             Array.isArray(data.states)
                 ? data.states
                 : []
         );
-
 
         loadTransfers(
             Array.isArray(data.transfers)
@@ -215,22 +623,23 @@ async function loadDashboard() {
                 : []
         );
 
+        console.log(
+            "✅ Dashboard loaded successfully"
+        );
 
     } catch (error) {
 
         console.error(
-            "Dashboard error:",
+            "❌ Dashboard error:",
             error
         );
-
 
         showTableError(
             "medicineTable",
             11,
-            "Unable to connect to backend.",
+            "Unable to load medicines.",
             error.message
         );
-
 
         showTableError(
             "stateTable",
@@ -238,7 +647,6 @@ async function loadDashboard() {
             "Unable to load states.",
             error.message
         );
-
 
         showTableError(
             "transferTable",
@@ -251,457 +659,18 @@ async function loadDashboard() {
 
 
 // ==========================================
-// SAFE TEXT
-// ==========================================
-
-function setText(id, value) {
-
-    const element =
-        document.getElementById(id);
-
-    if (!element) return;
-
-    element.textContent = value;
-}
-
-
-// ==========================================
-// TABLE ERROR
-// ==========================================
-
-function showTableError(
-    tableId,
-    colspan,
-    title,
-    message
-) {
-
-    const table =
-        document.getElementById(tableId);
-
-    if (!table) return;
-
-
-    table.innerHTML = `
-        <tr>
-            <td colspan="${colspan}">
-                <div class="empty">
-                    <div class="empty-icon">⚠️</div>
-                    <p>${escapeHTML(title)}</p>
-
-                    <small style="
-                        display:block;
-                        margin-top:6px;
-                        color:var(--muted);
-                    ">
-                        ${escapeHTML(message)}
-                    </small>
-                </div>
-            </td>
-        </tr>
-    `;
-}
-
-
-// ==========================================
-// PROGRESS BAR
-// ==========================================
-
-function updateBar(
-    id,
-    value,
-    total
-) {
-
-    const bar =
-        document.getElementById(id);
-
-    if (!bar) return;
-
-
-    if (!total || total <= 0) {
-
-        bar.style.width = "0%";
-
-        return;
-    }
-
-
-    const percentage =
-        Math.min(
-            100,
-            Math.round(
-                (Number(value) / Number(total)) * 100
-            )
-        );
-
-
-    bar.style.width =
-        `${percentage}%`;
-}
-
-
-// ==========================================
-// MEDICINES TABLE
-// ==========================================
-
-function loadMedicines(medicines) {
-
-    const table =
-        document.getElementById("medicineTable");
-
-    if (!table) return;
-
-
-    if (!Array.isArray(medicines) ||
-        medicines.length === 0) {
-
-        table.innerHTML = `
-            <tr>
-                <td colspan="11">
-                    <div class="empty">
-                        <div class="empty-icon">💊</div>
-                        <p>No medicines found.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-
-        return;
-    }
-
-
-    table.innerHTML =
-        medicines.map(m => {
-
-            const id =
-                m.id ??
-                m._id ??
-                "";
-
-            const days =
-                Number(m.days ?? 0);
-
-
-            const daysText =
-                days < 0
-                    ? `${Math.abs(days)}d ago`
-                    : `${days}d`;
-
-
-            const status =
-                String(
-                    m.status || "safe"
-                ).toLowerCase();
-
-
-            const quantity =
-                m.quantity ?? 0;
-
-
-            const price =
-                m.unit_price ??
-                m.price ??
-                0;
-
-
-            return `
-                <tr>
-
-                    <td class="mono">
-                        ${escapeHTML(id)}
-                    </td>
-
-
-                    <td>
-                        <div class="name">
-                            ${escapeHTML(
-                                m.name || ""
-                            )}
-                        </div>
-                    </td>
-
-
-                    <td style="
-                        font-size:12px;
-                        color:var(--muted);
-                    ">
-                        ${escapeHTML(
-                            m.manufacturer || ""
-                        )}
-                    </td>
-
-
-                    <td class="mono">
-                        ${escapeHTML(
-                            m.batch_number || ""
-                        )}
-                    </td>
-
-
-                    <td style="
-                        font-size:12px;
-                        color:var(--text2);
-                    ">
-                        ${escapeHTML(
-                            m.category || ""
-                        )}
-                    </td>
-
-
-                    <td class="mono">
-                        ${escapeHTML(
-                            formatDate(
-                                m.expiry_date
-                            )
-                        )}
-                    </td>
-
-
-                    <td>
-
-                        <span class="
-                            days
-                            ${escapeHTML(status)}
-                        ">
-                            ${escapeHTML(daysText)}
-                        </span>
-
-                    </td>
-
-
-                    <td class="mono">
-                        ${escapeHTML(quantity)}
-                    </td>
-
-
-                    <td class="mono">
-                        ₹${escapeHTML(price)}
-                    </td>
-
-
-                    <td>
-
-                        <span class="
-                            badge
-                            ${escapeHTML(status)}
-                        ">
-                            ${escapeHTML(status)}
-                        </span>
-
-                    </td>
-
-
-                    <td>
-
-                        <div style="
-                            display:flex;
-                            gap:6px;
-                        ">
-
-                            <button
-                                class="btn btn-ghost btn-sm"
-                                onclick="
-                                    editMedicine(
-                                        '${escapeJS(id)}'
-                                    )
-                                "
-                                title="Edit"
-                            >
-                                ✏️
-                            </button>
-
-
-                            <button
-                                class="btn btn-danger btn-sm"
-                                onclick="
-                                    deleteMedicine(
-                                        '${escapeJS(id)}'
-                                    )
-                                "
-                                title="Delete"
-                            >
-                                🗑️
-                            </button>
-
-                        </div>
-
-                    </td>
-
-                </tr>
-            `;
-
-        }).join("");
-}
-
-
-// ==========================================
-// STATES TABLE
-// ==========================================
-
-function loadStates(states) {
-
-    const table =
-        document.getElementById("stateTable");
-
-    if (!table) return;
-
-
-    if (!Array.isArray(states) ||
-        states.length === 0) {
-
-        table.innerHTML = `
-            <tr>
-                <td colspan="3">
-                    <div class="empty">
-                        <div class="empty-icon">🗺️</div>
-                        <p>No distributions yet.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-
-        return;
-    }
-
-
-    table.innerHTML =
-        states.map(s => `
-
-            <tr>
-
-                <td>
-
-                    <div class="name">
-
-                        ${escapeHTML(
-                            s.state_name || ""
-                        )}
-
-                    </div>
-
-                </td>
-
-
-                <td class="mono">
-
-                    ${escapeHTML(
-                        s.medicine_count ?? 0
-                    )}
-
-                </td>
-
-
-                <td class="mono">
-
-                    ${escapeHTML(
-                        s.total_qty ?? 0
-                    )}
-
-                </td>
-
-            </tr>
-
-        `).join("");
-}
-
-
-// ==========================================
-// TRANSFERS TABLE
-// ==========================================
-
-function loadTransfers(transfers) {
-
-    const table =
-        document.getElementById(
-            "transferTable"
-        );
-
-    if (!table) return;
-
-
-    if (!Array.isArray(transfers) ||
-        transfers.length === 0) {
-
-        table.innerHTML = `
-            <tr>
-                <td colspan="4">
-                    <div class="empty">
-                        <div class="empty-icon">🔄</div>
-                        <p>No transfers yet.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-
-        return;
-    }
-
-
-    table.innerHTML =
-        transfers.map(t => `
-
-            <tr>
-
-                <td>
-
-                    <div
-                        class="name"
-                        style="font-size:12px;"
-                    >
-                        ${escapeHTML(
-                            t.medicine_name || ""
-                        )}
-                    </div>
-
-                </td>
-
-
-                <td class="mono">
-
-                    ${escapeHTML(
-                        t.from_state || ""
-                    )}
-
-                </td>
-
-
-                <td class="mono">
-
-                    ${escapeHTML(
-                        t.to_state || ""
-                    )}
-
-                </td>
-
-
-                <td class="mono">
-
-                    ${escapeHTML(
-                        t.quantity ?? 0
-                    )}
-
-                </td>
-
-            </tr>
-
-        `).join("");
-}
-
-
-// ==========================================
 // SEARCH
 // ==========================================
 
 function setupSearch() {
 
     const searchInput =
-        document.getElementById(
-            "search"
-        );
+        document.getElementById("search");
 
-    if (!searchInput) return;
-
+    if (!searchInput) {
+        console.log("Search input not found");
+        return;
+    }
 
     searchInput.addEventListener(
         "input",
@@ -712,7 +681,6 @@ function setupSearch() {
                     .toLowerCase()
                     .trim();
 
-
             document
                 .querySelectorAll(
                     "#medicineTable tr"
@@ -722,7 +690,6 @@ function setupSearch() {
                     const text =
                         row.textContent
                             .toLowerCase();
-
 
                     row.style.display =
                         text.includes(query)
@@ -746,13 +713,10 @@ function editMedicine(id) {
         id === ""
     ) {
 
-        alert(
-            "Invalid medicine ID."
-        );
+        alert("Invalid medicine ID.");
 
         return;
     }
-
 
     window.location.href =
         `edit.html?id=${encodeURIComponent(id)}`;
@@ -771,22 +735,19 @@ async function deleteMedicine(id) {
         id === ""
     ) {
 
-        alert(
-            "Invalid medicine ID."
-        );
+        alert("Invalid medicine ID.");
 
         return;
     }
-
 
     const confirmed =
         confirm(
             "Delete this medicine? This cannot be undone."
         );
 
-
-    if (!confirmed) return;
-
+    if (!confirmed) {
+        return;
+    }
 
     try {
 
@@ -798,8 +759,7 @@ async function deleteMedicine(id) {
                 }
             );
 
-
-        if (!data.success) {
+        if (data.success !== true) {
 
             throw new Error(
                 data.message ||
@@ -807,23 +767,19 @@ async function deleteMedicine(id) {
             );
         }
 
-
         alert(
             data.message ||
             "Medicine deleted successfully."
         );
 
-
         await loadDashboard();
-
 
     } catch (error) {
 
         console.error(
-            "Delete error:",
+            "❌ Delete error:",
             error
         );
-
 
         alert(
             `Unable to delete medicine.\n\n${error.message}`
@@ -833,182 +789,14 @@ async function deleteMedicine(id) {
 
 
 // ==========================================
-// HTML SECURITY
-// ==========================================
-
-function escapeHTML(value) {
-
-    if (
-        value === null ||
-        value === undefined
-    ) {
-
-        return "";
-    }
-
-
-    return String(value)
-
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-
-        .replace(
-            /</g,
-            "&lt;"
-        )
-
-        .replace(
-            />/g,
-            "&gt;"
-        )
-
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-
-        .replace(
-            /'/g,
-            "&#039;"
-        );
-}
-
-
-// ==========================================
-// JAVASCRIPT STRING SECURITY
-// ==========================================
-
-function escapeJS(value) {
-
-    if (
-        value === null ||
-        value === undefined
-    ) {
-
-        return "";
-    }
-
-
-    return String(value)
-        .replace(
-            /\\/g,
-            "\\\\"
-        )
-        .replace(
-            /'/g,
-            "\\'"
-        )
-        .replace(
-            /\r/g,
-            "\\r"
-        )
-        .replace(
-            /\n/g,
-            "\\n"
-        );
-}
-
-
-// ==========================================
-// DATE FORMAT
-// ==========================================
-
-function formatDate(value) {
-
-    if (!value) return "";
-
-
-    // MongoDB date object support
-    if (
-        typeof value === "object" &&
-        value.$date
-    ) {
-
-        value = value.$date;
-    }
-
-
-    const date =
-        new Date(value);
-
-
-    if (
-        isNaN(
-            date.getTime()
-        )
-    ) {
-
-        return String(value);
-    }
-
-
-    // Keep YYYY-MM-DD format
-    return date
-        .toISOString()
-        .split("T")[0];
-}
-
-
-// ==========================================
-// COUNT ANIMATION
-// ==========================================
-
-function animateValue(
-    element,
-    target
-) {
-
-    if (!element) return;
-
-
-    target =
-        Number(target) || 0;
-
-
-    let current = 0;
-
-
-    const step =
-        Math.max(
-            1,
-            Math.ceil(
-                target / 30
-            )
-        );
-
-
-    const timer =
-        setInterval(() => {
-
-            current += step;
-
-
-            if (
-                current >= target
-            ) {
-
-                current = target;
-
-                clearInterval(
-                    timer
-                );
-            }
-
-
-            element.textContent =
-                current;
-
-        }, 20);
-}
-
-
-// ==========================================
 // BACKEND HEALTH CHECK
 // ==========================================
 
 async function checkBackend() {
+
+    console.log(
+        "🔍 Checking backend..."
+    );
 
     try {
 
@@ -1017,27 +805,29 @@ async function checkBackend() {
                 "/api/health"
             );
 
-
         console.log(
-            "Backend health:",
+            "🏥 Backend health:",
             data
         );
 
-
-        if (data.success) {
+        if (
+            data.success === true &&
+            data.database === "connected"
+        ) {
 
             console.log(
-                "✅ Backend + MongoDB connected"
+                "✅ Render + MongoDB Atlas connected"
             );
 
-        } else {
-
-            console.warn(
-                "⚠️ Backend reachable but database error:",
-                data.message
-            );
+            return true;
         }
 
+        console.warn(
+            "⚠️ Backend connected but database status is:",
+            data.database
+        );
+
+        return false;
 
     } catch (error) {
 
@@ -1045,6 +835,8 @@ async function checkBackend() {
             "❌ Backend health check failed:",
             error
         );
+
+        return false;
     }
 }
 
@@ -1055,14 +847,14 @@ async function checkBackend() {
 
 document.addEventListener(
     "DOMContentLoaded",
-    async () => {
+    async function () {
 
         console.log(
-            "================================="
+            "===================================="
         );
 
         console.log(
-            "PharmTrack Frontend Started"
+            "🚀 PharmTrack Frontend Started"
         );
 
         console.log(
@@ -1071,17 +863,13 @@ document.addEventListener(
         );
 
         console.log(
-            "================================="
+            "===================================="
         );
-
 
         setupSearch();
 
-
         await checkBackend();
 
-
         await loadDashboard();
-
     }
 );
