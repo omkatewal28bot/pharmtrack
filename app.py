@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import MySQLdb
-import MySQLdb.cursors
+from pymongo import MongoClient
 from datetime import date, datetime
 import os
 
@@ -9,33 +8,31 @@ app = Flask(__name__)
 CORS(app)
 
 # ============================================================
-# DATABASE CONFIGURATION
-# Set these in Render Environment Variables
+# MONGODB CONFIGURATION
+# Set MONGODB_URI in Render Environment Variables
 # ============================================================
 
-MYSQL_HOST = os.environ.get("MYSQL_HOST")
-MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
-MYSQL_USER = os.environ.get("MYSQL_USER")
-MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD")
-MYSQL_DB = os.environ.get("MYSQL_DB")
+MONGODB_URI = os.environ.get("MONGODB_URI")
+MONGODB_DB = os.environ.get("MONGODB_DB", "pharmtrack")
+
+client = None
+db = None
 
 
 def get_db():
-    if not all([MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB]):
+    global client, db
+
+    if not MONGODB_URI:
         raise RuntimeError(
-            "Database environment variables are missing. "
-            "Set MYSQL_HOST, MYSQL_PORT, MYSQL_USER, "
-            "MYSQL_PASSWORD and MYSQL_DB in Render."
+            "MONGODB_URI environment variable is missing. "
+            "Add your MongoDB Atlas connection string in Render."
         )
 
-    return MySQLdb.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        user=MYSQL_USER,
-        passwd=MYSQL_PASSWORD,
-        db=MYSQL_DB,
-        cursorclass=MySQLdb.cursors.DictCursor
-    )
+    if client is None:
+        client = MongoClient(MONGODB_URI)
+        db = client[MONGODB_DB]
+
+    return db
 
 
 # ============================================================
@@ -173,41 +170,61 @@ MEDICINE_INFO = {
 
 
 # ============================================================
-# HELPER FUNCTIONS
+# HELPERS
 # ============================================================
 
 def get_status(expiry_date):
 
-    if isinstance(expiry_date, str):
+    if isinstance(expiry_date, datetime):
+        expiry_date = expiry_date.date()
+
+    elif isinstance(expiry_date, str):
         expiry_date = datetime.strptime(
-            expiry_date, "%Y-%m-%d"
+            expiry_date[:10],
+            "%Y-%m-%d"
         ).date()
 
     days = (expiry_date - date.today()).days
 
     if days < 0:
         return days, "expired"
+
     elif days <= 30:
         return days, "critical"
+
     elif days <= 90:
         return days, "warning"
-    else:
-        return days, "safe"
+
+    return days, "safe"
 
 
 def serialize(value):
 
     if isinstance(value, (date, datetime)):
-        return str(value)
+        return value.isoformat()
 
     return value
 
 
+def clean_document(doc):
+
+    if not doc:
+        return None
+
+    doc = dict(doc)
+
+    doc.pop("_id", None)
+
+    return doc
+
+
 def enrich(med):
 
-    med = dict(med)
+    med = clean_document(med)
 
-    days, status = get_status(med["expiry_date"])
+    days, status = get_status(
+        med["expiry_date"]
+    )
 
     med["days"] = days
     med["status"] = status
@@ -220,7 +237,10 @@ def enrich(med):
         if key in med:
             med[key] = serialize(med[key])
 
-    category = med.get("category", "Other")
+    category = med.get(
+        "category",
+        "Other"
+    )
 
     med["info"] = MEDICINE_INFO.get(
         category,
@@ -237,7 +257,10 @@ def get_usability_score(
     light_exposure=False
 ):
 
-    category = med.get("category", "Other")
+    category = med.get(
+        "category",
+        "Other"
+    )
 
     info = MEDICINE_INFO.get(
         category,
@@ -260,6 +283,7 @@ def get_usability_score(
     elif days <= 30:
 
         score -= 30
+
         warnings.append(
             f"Expires in {days} days — use immediately"
         )
@@ -267,6 +291,7 @@ def get_usability_score(
     elif days <= 90:
 
         score -= 10
+
         warnings.append(
             f"Expires in {days} days — use soon"
         )
@@ -337,10 +362,13 @@ def get_usability_score(
 
     if score >= 80:
         grade = "safe"
+
     elif score >= 60:
         grade = "warning"
+
     elif score >= 30:
         grade = "critical"
+
     else:
         grade = "expired"
 
@@ -348,7 +376,7 @@ def get_usability_score(
 
 
 # ============================================================
-# HEALTH CHECK
+# HOME
 # ============================================================
 
 @app.route("/")
@@ -358,21 +386,28 @@ def home():
         "success": True,
         "message": "PharmTrack API is running",
         "frontend": "Netlify",
-        "backend": "Render"
+        "backend": "Render",
+        "database": "MongoDB Atlas"
     })
 
+
+# ============================================================
+# HEALTH
+# ============================================================
 
 @app.route("/api/health")
 def health():
 
     try:
 
-        db = get_db()
-        db.close()
+        database = get_db()
+
+        database.command("ping")
 
         return jsonify({
             "success": True,
-            "database": "connected"
+            "database": "connected",
+            "database_type": "MongoDB Atlas"
         })
 
     except Exception as e:
@@ -393,21 +428,19 @@ def get_medicines():
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            "SELECT * FROM medicines "
-            "ORDER BY expiry_date ASC"
+        rows = database.medicines.find(
+            {}
+        ).sort(
+            "expiry_date",
+            1
         )
 
         medicines = [
-            enrich(m)
-            for m in cur.fetchall()
+            enrich(row)
+            for row in rows
         ]
-
-        cur.close()
-        db.close()
 
         return jsonify({
             "success": True,
@@ -431,18 +464,11 @@ def get_medicine(id):
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            "SELECT * FROM medicines WHERE id=%s",
-            (id,)
+        medicine = database.medicines.find_one(
+            {"id": id}
         )
-
-        medicine = cur.fetchone()
-
-        cur.close()
-        db.close()
 
         if not medicine:
 
@@ -473,7 +499,7 @@ def add_medicine():
 
     try:
 
-        data = request.get_json()
+        data = request.get_json() or {}
 
         required = [
             "name",
@@ -491,96 +517,107 @@ def add_medicine():
 
                 return jsonify({
                     "success": False,
-                    "message": f"{field} is required"
+                    "message":
+                        f"{field} is required"
                 }), 400
 
-        name = data["name"].strip()
-        batch = data["batch_number"].strip()
+        name = str(
+            data["name"]
+        ).strip()
+
+        batch = str(
+            data["batch_number"]
+        ).strip()
+
         category = data["category"]
-        manufacturer = data["manufacturer"].strip()
+
+        manufacturer = str(
+            data["manufacturer"]
+        ).strip()
+
         mfg = data["manufacture_date"]
         exp = data["expiry_date"]
-        quantity = int(data["quantity"])
-        price = data.get("unit_price", 0)
+
+        quantity = int(
+            data["quantity"]
+        )
+
+        price = float(
+            data.get("unit_price", 0)
+        )
 
         if quantity < 0:
 
             return jsonify({
                 "success": False,
-                "message": "Quantity cannot be negative"
+                "message":
+                    "Quantity cannot be negative"
             }), 400
 
         mfg_date = datetime.strptime(
-            mfg, "%Y-%m-%d"
+            mfg,
+            "%Y-%m-%d"
         ).date()
 
         exp_date = datetime.strptime(
-            exp, "%Y-%m-%d"
+            exp,
+            "%Y-%m-%d"
         ).date()
 
         if exp_date <= mfg_date:
 
             return jsonify({
                 "success": False,
-                "message": "Expiry date must be after manufacture date"
+                "message":
+                    "Expiry date must be after manufacture date"
             }), 400
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            "SELECT id FROM medicines "
-            "WHERE batch_number=%s",
-            (batch,)
+        existing = database.medicines.find_one(
+            {"batch_number": batch}
         )
 
-        if cur.fetchone():
-
-            cur.close()
-            db.close()
+        if existing:
 
             return jsonify({
                 "success": False,
-                "message": "Batch number already exists"
+                "message":
+                    "Batch number already exists"
             }), 409
 
-        cur.execute(
-            """
-            INSERT INTO medicines
-            (
-                name,
-                batch_number,
-                category,
-                manufacturer,
-                manufacture_date,
-                expiry_date,
-                quantity,
-                unit_price
-            )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-            """,
-            (
-                name,
-                batch,
-                category,
-                manufacturer,
-                mfg,
-                exp,
-                quantity,
-                price
-            )
+        last = database.medicines.find_one(
+            {},
+            sort=[("id", -1)]
         )
 
-        db.commit()
+        new_id = (
+            (last.get("id", 0) + 1)
+            if last
+            else 1
+        )
 
-        new_id = cur.lastrowid
+        medicine = {
+            "id": new_id,
+            "name": name,
+            "batch_number": batch,
+            "category": category,
+            "manufacturer": manufacturer,
+            "manufacture_date": mfg,
+            "expiry_date": exp,
+            "quantity": quantity,
+            "unit_price": price,
+            "added_on": datetime.utcnow()
+        }
 
-        cur.close()
-        db.close()
+        database.medicines.insert_one(
+            medicine
+        )
 
         return jsonify({
             "success": True,
-            "message": "Medicine added successfully",
+            "message":
+                "Medicine added successfully",
             "id": new_id
         }), 201
 
@@ -601,106 +638,106 @@ def update_medicine(id):
 
     try:
 
-        data = request.get_json()
+        data = request.get_json() or {}
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            "SELECT id FROM medicines WHERE id=%s",
-            (id,)
+        existing = database.medicines.find_one(
+            {"id": id}
         )
 
-        if not cur.fetchone():
-
-            cur.close()
-            db.close()
+        if not existing:
 
             return jsonify({
                 "success": False,
-                "message": "Medicine not found"
+                "message":
+                    "Medicine not found"
             }), 404
 
-        name = data["name"].strip()
-        batch = data["batch_number"].strip()
+        name = str(
+            data["name"]
+        ).strip()
+
+        batch = str(
+            data["batch_number"]
+        ).strip()
+
         category = data["category"]
-        manufacturer = data["manufacturer"].strip()
+
+        manufacturer = str(
+            data["manufacturer"]
+        ).strip()
+
         mfg = data["manufacture_date"]
         exp = data["expiry_date"]
-        quantity = int(data["quantity"])
-        price = data.get("unit_price", 0)
+
+        quantity = int(
+            data["quantity"]
+        )
+
+        price = float(
+            data.get("unit_price", 0)
+        )
+
+        if quantity < 0:
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "Quantity cannot be negative"
+            }), 400
 
         mfg_date = datetime.strptime(
-            mfg, "%Y-%m-%d"
+            mfg,
+            "%Y-%m-%d"
         ).date()
 
         exp_date = datetime.strptime(
-            exp, "%Y-%m-%d"
+            exp,
+            "%Y-%m-%d"
         ).date()
 
         if exp_date <= mfg_date:
 
-            cur.close()
-            db.close()
-
             return jsonify({
                 "success": False,
-                "message": "Expiry date must be after manufacture date"
+                "message":
+                    "Expiry date must be after manufacture date"
             }), 400
 
-        cur.execute(
-            """
-            SELECT id FROM medicines
-            WHERE batch_number=%s AND id!=%s
-            """,
-            (batch, id)
-        )
+        duplicate = database.medicines.find_one({
+            "batch_number": batch,
+            "id": {"$ne": id}
+        })
 
-        if cur.fetchone():
-
-            cur.close()
-            db.close()
+        if duplicate:
 
             return jsonify({
                 "success": False,
-                "message": "Batch number already exists"
+                "message":
+                    "Batch number already exists"
             }), 409
 
-        cur.execute(
-            """
-            UPDATE medicines
-            SET
-                name=%s,
-                batch_number=%s,
-                category=%s,
-                manufacturer=%s,
-                manufacture_date=%s,
-                expiry_date=%s,
-                quantity=%s,
-                unit_price=%s
-            WHERE id=%s
-            """,
-            (
-                name,
-                batch,
-                category,
-                manufacturer,
-                mfg,
-                exp,
-                quantity,
-                price,
-                id
-            )
+        database.medicines.update_one(
+            {"id": id},
+            {
+                "$set": {
+                    "name": name,
+                    "batch_number": batch,
+                    "category": category,
+                    "manufacturer": manufacturer,
+                    "manufacture_date": mfg,
+                    "expiry_date": exp,
+                    "quantity": quantity,
+                    "unit_price": price
+                }
+            }
         )
-
-        db.commit()
-
-        cur.close()
-        db.close()
 
         return jsonify({
             "success": True,
-            "message": "Medicine updated successfully"
+            "message":
+                "Medicine updated successfully"
         })
 
     except Exception as e:
@@ -720,32 +757,24 @@ def delete_medicine(id):
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            "DELETE FROM medicines WHERE id=%s",
-            (id,)
+        result = database.medicines.delete_one(
+            {"id": id}
         )
 
-        if cur.rowcount == 0:
-
-            cur.close()
-            db.close()
+        if result.deleted_count == 0:
 
             return jsonify({
                 "success": False,
-                "message": "Medicine not found"
+                "message":
+                    "Medicine not found"
             }), 404
-
-        db.commit()
-
-        cur.close()
-        db.close()
 
         return jsonify({
             "success": True,
-            "message": "Medicine deleted successfully"
+            "message":
+                "Medicine deleted successfully"
         })
 
     except Exception as e:
@@ -757,7 +786,7 @@ def delete_medicine(id):
 
 
 # ============================================================
-# DASHBOARD STATS
+# DASHBOARD
 # ============================================================
 
 @app.route("/api/dashboard", methods=["GET"])
@@ -765,17 +794,16 @@ def dashboard():
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
-
-        cur.execute(
-            "SELECT * FROM medicines "
-            "ORDER BY expiry_date ASC"
-        )
+        database = get_db()
 
         medicines = [
-            enrich(m)
-            for m in cur.fetchall()
+            enrich(row)
+            for row in database.medicines.find(
+                {}
+            ).sort(
+                "expiry_date",
+                1
+            )
         ]
 
         stats = {
@@ -798,62 +826,99 @@ def dashboard():
             )
         }
 
-        cur.execute(
-            """
-            SELECT
-                sd.state_name,
-                COUNT(DISTINCT sd.medicine_id)
-                    AS medicine_count,
-                SUM(sd.quantity)
-                    AS total_qty
-            FROM state_distribution sd
-            GROUP BY sd.state_name
-            ORDER BY total_qty DESC
-            LIMIT 8
-            """
+        state_rows = list(
+            database.state_distribution.find({})
         )
 
-        states = cur.fetchall()
+        states_dict = {}
 
-        cur.execute(
-            """
-            SELECT
-                t.id,
-                m.name AS medicine_name,
-                t.from_state,
-                t.to_state,
-                t.quantity,
-                t.transferred_on
-            FROM transfers t
-            JOIN medicines m
-                ON t.medicine_id = m.id
-            ORDER BY t.transferred_on DESC
-            LIMIT 5
-            """
+        for row in state_rows:
+
+            state = row.get(
+                "state_name",
+                "Unknown"
+            )
+
+            if state not in states_dict:
+
+                states_dict[state] = {
+                    "state_name": state,
+                    "medicine_ids": set(),
+                    "total_qty": 0
+                }
+
+            states_dict[state][
+                "medicine_ids"
+            ].add(
+                row.get("medicine_id")
+            )
+
+            states_dict[state][
+                "total_qty"
+            ] += int(
+                row.get("quantity", 0)
+            )
+
+        states = []
+
+        for state, value in states_dict.items():
+
+            states.append({
+                "state_name":
+                    value["state_name"],
+                "medicine_count":
+                    len(value["medicine_ids"]),
+                "total_qty":
+                    value["total_qty"]
+            })
+
+        states.sort(
+            key=lambda x: x["total_qty"],
+            reverse=True
         )
 
-        transfers = cur.fetchall()
+        states = states[:8]
+
+        transfers = list(
+            database.transfers.find(
+                {}
+            ).sort(
+                "transferred_on",
+                -1
+            ).limit(5)
+        )
+
+        transfer_list = []
 
         for t in transfers:
 
-            if isinstance(
-                t.get("transferred_on"),
-                (date, datetime)
-            ):
+            medicine = database.medicines.find_one(
+                {"id": t.get("medicine_id")}
+            )
 
-                t["transferred_on"] = str(
-                    t["transferred_on"]
-                )
-
-        cur.close()
-        db.close()
+            transfer_list.append({
+                "id": t.get("id"),
+                "medicine_name":
+                    medicine.get("name", "Unknown")
+                    if medicine else "Unknown",
+                "from_state":
+                    t.get("from_state"),
+                "to_state":
+                    t.get("to_state"),
+                "quantity":
+                    t.get("quantity"),
+                "transferred_on":
+                    serialize(
+                        t.get("transferred_on")
+                    )
+            })
 
         return jsonify({
             "success": True,
             "stats": stats,
             "medicines": medicines,
             "states": states,
-            "transfers": transfers
+            "transfers": transfer_list
         })
 
     except Exception as e:
@@ -873,49 +938,60 @@ def get_states():
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            """
-            SELECT
-                sd.state_name,
-                m.name AS medicine_name,
-                m.category,
-                sd.quantity,
-                sd.distributed_on,
-                m.expiry_date
-            FROM state_distribution sd
-            JOIN medicines m
-                ON sd.medicine_id = m.id
-            ORDER BY
-                sd.state_name,
-                sd.distributed_on DESC
-            """
+        rows = list(
+            database.state_distribution.find({})
         )
 
-        rows = cur.fetchall()
-
-        cur.close()
-        db.close()
+        result = []
 
         for row in rows:
 
-            row["expiry_date"] = serialize(
-                row["expiry_date"]
+            medicine = database.medicines.find_one(
+                {"id": row.get("medicine_id")}
             )
 
-            row["distributed_on"] = serialize(
-                row["distributed_on"]
+            if not medicine:
+                continue
+
+            expiry = medicine.get(
+                "expiry_date"
             )
 
-            _, row["status"] = get_status(
-                row["expiry_date"]
+            _, status = get_status(
+                expiry
             )
+
+            result.append({
+                "state_name":
+                    row.get("state_name"),
+                "medicine_name":
+                    medicine.get("name"),
+                "category":
+                    medicine.get("category"),
+                "quantity":
+                    row.get("quantity", 0),
+                "distributed_on":
+                    serialize(
+                        row.get("distributed_on")
+                    ),
+                "expiry_date":
+                    serialize(expiry),
+                "status":
+                    status
+            })
+
+        result.sort(
+            key=lambda x: (
+                x["state_name"],
+                x["distributed_on"] or ""
+            )
+        )
 
         return jsonify({
             "success": True,
-            "states": rows
+            "states": result
         })
 
     except Exception as e:
@@ -935,11 +1011,20 @@ def distribute():
 
     try:
 
-        data = request.get_json()
+        data = request.get_json() or {}
 
-        medicine_id = data["medicine_id"]
-        state_name = data["state_name"].strip()
-        quantity = int(data["quantity"])
+        medicine_id = int(
+            data["medicine_id"]
+        )
+
+        state_name = str(
+            data["state_name"]
+        ).strip()
+
+        quantity = int(
+            data["quantity"]
+        )
+
         distributed_on = data.get(
             "distributed_on",
             str(date.today())
@@ -949,84 +1034,76 @@ def distribute():
 
             return jsonify({
                 "success": False,
-                "message": "State name is required"
+                "message":
+                    "State name is required"
             }), 400
 
         if quantity <= 0:
 
             return jsonify({
                 "success": False,
-                "message": "Quantity must be positive"
+                "message":
+                    "Quantity must be positive"
             }), 400
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            "SELECT quantity FROM medicines "
-            "WHERE id=%s",
-            (medicine_id,)
+        medicine = database.medicines.find_one(
+            {"id": medicine_id}
         )
 
-        med = cur.fetchone()
-
-        if not med:
-
-            cur.close()
-            db.close()
-
-            return jsonify({
-                "success": False,
-                "message": "Medicine not found"
-            }), 404
-
-        if quantity > med["quantity"]:
-
-            cur.close()
-            db.close()
+        if not medicine:
 
             return jsonify({
                 "success": False,
                 "message":
-                    f"Only {med['quantity']} units available"
+                    "Medicine not found"
+            }), 404
+
+        available = int(
+            medicine.get("quantity", 0)
+        )
+
+        if quantity > available:
+
+            return jsonify({
+                "success": False,
+                "message":
+                    f"Only {available} units available"
             }), 400
 
-        cur.execute(
-            """
-            INSERT INTO state_distribution
-            (
-                medicine_id,
-                state_name,
-                quantity,
-                distributed_on
-            )
-            VALUES (%s,%s,%s,%s)
-            """,
-            (
-                medicine_id,
-                state_name,
-                quantity,
-                distributed_on
-            )
+        last = database.state_distribution.find_one(
+            {},
+            sort=[("id", -1)]
         )
 
-        cur.execute(
-            """
-            UPDATE medicines
-            SET quantity = quantity - %s
-            WHERE id=%s
-            """,
-            (quantity, medicine_id)
+        new_id = (
+            (last.get("id", 0) + 1)
+            if last
+            else 1
         )
 
-        db.commit()
+        database.state_distribution.insert_one({
+            "id": new_id,
+            "medicine_id": medicine_id,
+            "state_name": state_name,
+            "quantity": quantity,
+            "distributed_on": distributed_on
+        })
 
-        cur.close()
-        db.close()
+        database.medicines.update_one(
+            {"id": medicine_id},
+            {
+                "$inc": {
+                    "quantity": -quantity
+                }
+            }
+        )
 
         return jsonify({
             "success": True,
-            "message": "Distribution recorded"
+            "message":
+                "Distribution recorded"
         })
 
     except Exception as e:
@@ -1038,7 +1115,7 @@ def distribute():
 
 
 # ============================================================
-# TRANSFERS
+# TRANSFERS - GET
 # ============================================================
 
 @app.route("/api/transfers", methods=["GET"])
@@ -1046,41 +1123,49 @@ def get_transfers():
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            """
-            SELECT
-                t.id,
-                m.name AS medicine_name,
-                m.category,
-                t.from_state,
-                t.to_state,
-                t.quantity,
-                t.transferred_on,
-                t.notes
-            FROM transfers t
-            JOIN medicines m
-                ON t.medicine_id = m.id
-            ORDER BY t.transferred_on DESC
-            """
+        rows = database.transfers.find(
+            {}
+        ).sort(
+            "transferred_on",
+            -1
         )
 
-        rows = cur.fetchall()
-
-        cur.close()
-        db.close()
+        transfers = []
 
         for row in rows:
 
-            row["transferred_on"] = serialize(
-                row["transferred_on"]
+            medicine = database.medicines.find_one(
+                {"id": row.get("medicine_id")}
             )
+
+            transfers.append({
+                "id":
+                    row.get("id"),
+                "medicine_name":
+                    medicine.get("name")
+                    if medicine else "Unknown",
+                "category":
+                    medicine.get("category")
+                    if medicine else "Other",
+                "from_state":
+                    row.get("from_state"),
+                "to_state":
+                    row.get("to_state"),
+                "quantity":
+                    row.get("quantity"),
+                "transferred_on":
+                    serialize(
+                        row.get("transferred_on")
+                    ),
+                "notes":
+                    row.get("notes", "")
+            })
 
         return jsonify({
             "success": True,
-            "transfers": rows
+            "transfers": transfers
         })
 
     except Exception as e:
@@ -1091,22 +1176,41 @@ def get_transfers():
         }), 500
 
 
+# ============================================================
+# TRANSFERS - POST
+# ============================================================
+
 @app.route("/api/transfers", methods=["POST"])
 def add_transfer_api():
 
     try:
 
-        data = request.get_json()
+        data = request.get_json() or {}
 
-        medicine_id = data["medicine_id"]
-        from_state = data["from_state"].strip()
-        to_state = data["to_state"].strip()
-        quantity = int(data["quantity"])
+        medicine_id = int(
+            data["medicine_id"]
+        )
+
+        from_state = str(
+            data["from_state"]
+        ).strip()
+
+        to_state = str(
+            data["to_state"]
+        ).strip()
+
+        quantity = int(
+            data["quantity"]
+        )
+
         transferred_on = data.get(
             "transferred_on",
             str(date.today())
         )
-        notes = data.get("notes", "").strip()
+
+        notes = str(
+            data.get("notes", "")
+        ).strip()
 
         if not from_state or not to_state:
 
@@ -1132,40 +1236,45 @@ def add_transfer_api():
                     "Quantity must be positive"
             }), 400
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            """
-            INSERT INTO transfers
-            (
-                medicine_id,
-                from_state,
-                to_state,
-                quantity,
-                transferred_on,
-                notes
-            )
-            VALUES (%s,%s,%s,%s,%s,%s)
-            """,
-            (
-                medicine_id,
-                from_state,
-                to_state,
-                quantity,
-                transferred_on,
-                notes
-            )
+        medicine = database.medicines.find_one(
+            {"id": medicine_id}
         )
 
-        db.commit()
+        if not medicine:
 
-        cur.close()
-        db.close()
+            return jsonify({
+                "success": False,
+                "message":
+                    "Medicine not found"
+            }), 404
+
+        last = database.transfers.find_one(
+            {},
+            sort=[("id", -1)]
+        )
+
+        new_id = (
+            (last.get("id", 0) + 1)
+            if last
+            else 1
+        )
+
+        database.transfers.insert_one({
+            "id": new_id,
+            "medicine_id": medicine_id,
+            "from_state": from_state,
+            "to_state": to_state,
+            "quantity": quantity,
+            "transferred_on": transferred_on,
+            "notes": notes
+        })
 
         return jsonify({
             "success": True,
-            "message": "Transfer recorded"
+            "message":
+                "Transfer recorded"
         }), 201
 
     except Exception as e:
@@ -1188,11 +1297,17 @@ def usability_api():
         data = request.get_json() or {}
 
         temp = float(
-            data.get("temperature", 25)
+            data.get(
+                "temperature",
+                25
+            )
         )
 
         humidity = float(
-            data.get("humidity", 60)
+            data.get(
+                "humidity",
+                60
+            )
         )
 
         light = data.get(
@@ -1200,21 +1315,12 @@ def usability_api():
             False
         )
 
-        db = get_db()
-        cur = db.cursor()
-
-        cur.execute(
-            "SELECT * FROM medicines "
-            "ORDER BY name"
-        )
+        database = get_db()
 
         medicines = [
-            enrich(m)
-            for m in cur.fetchall()
+            enrich(row)
+            for row in database.medicines.find({})
         ]
-
-        cur.close()
-        db.close()
 
         results = []
 
@@ -1230,9 +1336,12 @@ def usability_api():
 
             results.append({
                 **med,
-                "score": score,
-                "warnings": warnings,
-                "grade": grade
+                "score":
+                    score,
+                "warnings":
+                    warnings,
+                "grade":
+                    grade
             })
 
         results.sort(
@@ -1264,38 +1373,22 @@ def prediction_api():
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            """
-            SELECT
-                m.id,
-                m.name,
-                m.category,
-                m.quantity,
-                m.expiry_date,
-                m.unit_price,
-                m.batch_number,
-                COALESCE(
-                    SUM(sd.quantity), 0
-                ) AS total_distributed
-            FROM medicines m
-            LEFT JOIN state_distribution sd
-                ON m.id = sd.medicine_id
-            GROUP BY m.id
-            ORDER BY m.expiry_date ASC
-            """
+        rows = list(
+            database.medicines.find(
+                {}
+            ).sort(
+                "expiry_date",
+                1
+            )
         )
-
-        rows = cur.fetchall()
-
-        cur.close()
-        db.close()
 
         predictions = []
 
         for row in rows:
+
+            row = clean_document(row)
 
             days, status = get_status(
                 row["expiry_date"]
@@ -1305,11 +1398,21 @@ def prediction_api():
                 row["expiry_date"]
             )
 
-            distributed = (
-                row["total_distributed"] or 0
+            distributions = database.state_distribution.find(
+                {
+                    "medicine_id":
+                        row["id"]
+                }
             )
 
-            stock = row["quantity"] or 0
+            distributed = sum(
+                int(d.get("quantity", 0))
+                for d in distributions
+            )
+
+            stock = int(
+                row.get("quantity", 0)
+            )
 
             if distributed == 0:
 
@@ -1328,7 +1431,9 @@ def prediction_api():
 
             if distributed > 0 and stock > 0:
 
-                daily_rate = distributed / 180
+                daily_rate = (
+                    distributed / 180
+                )
 
                 days_to_sell = int(
                     stock / daily_rate
@@ -1343,7 +1448,10 @@ def prediction_api():
                 risk = "Expired"
                 risk_color = "expired"
 
-            elif days_to_sell > days and days > 0:
+            elif (
+                days_to_sell > days
+                and days > 0
+            ):
 
                 risk = "Will Expire Before Sale!"
                 risk_color = "critical"
@@ -1360,26 +1468,35 @@ def prediction_api():
 
             predictions.append({
                 **row,
-                "days": days,
-                "status": status,
-                "demand": demand,
-                "demand_score": demand_score,
+                "days":
+                    days,
+                "status":
+                    status,
+                "demand":
+                    demand,
+                "demand_score":
+                    demand_score,
                 "days_to_sell":
                     days_to_sell
                     if days_to_sell != 999
                     else "N/A",
-                "distributed": distributed,
-                "risk": risk,
-                "risk_color": risk_color,
-                "info": MEDICINE_INFO.get(
-                    row["category"],
-                    MEDICINE_INFO["Other"]
-                )
+                "distributed":
+                    distributed,
+                "risk":
+                    risk,
+                "risk_color":
+                    risk_color,
+                "info":
+                    MEDICINE_INFO.get(
+                        row.get("category"),
+                        MEDICINE_INFO["Other"]
+                    )
             })
 
         return jsonify({
             "success": True,
-            "predictions": predictions
+            "predictions":
+                predictions
         })
 
     except Exception as e:
@@ -1399,29 +1516,50 @@ def knowledge_api():
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            """
-            SELECT
-                category,
-                COUNT(*) AS count,
-                SUM(quantity) AS total_qty
-            FROM medicines
-            GROUP BY category
-            """
+        rows = list(
+            database.medicines.find({})
         )
 
-        category_stats = cur.fetchall()
+        category_stats = {}
 
-        cur.close()
-        db.close()
+        for medicine in rows:
+
+            category = medicine.get(
+                "category",
+                "Other"
+            )
+
+            if category not in category_stats:
+
+                category_stats[category] = {
+                    "category": category,
+                    "count": 0,
+                    "total_qty": 0
+                }
+
+            category_stats[category][
+                "count"
+            ] += 1
+
+            category_stats[category][
+                "total_qty"
+            ] += int(
+                medicine.get(
+                    "quantity",
+                    0
+                )
+            )
 
         return jsonify({
             "success": True,
-            "medicine_info": MEDICINE_INFO,
-            "category_stats": category_stats
+            "medicine_info":
+                MEDICINE_INFO,
+            "category_stats":
+                list(
+                    category_stats.values()
+                )
         })
 
     except Exception as e:
@@ -1441,31 +1579,23 @@ def fifo_api():
 
     try:
 
-        db = get_db()
-        cur = db.cursor()
+        database = get_db()
 
-        cur.execute(
-            """
-            SELECT
-                id,
-                name,
-                batch_number,
-                category,
-                manufacturer,
-                manufacture_date,
-                expiry_date,
-                quantity,
-                unit_price
-            FROM medicines
-            WHERE quantity > 0
-            ORDER BY name, expiry_date ASC
-            """
-        )
+        rows = database.medicines.find(
+            {
+                "quantity": {
+                    "$gt": 0
+                }
+            }
+        ).sort([
+            ("name", 1),
+            ("expiry_date", 1)
+        ])
 
-        rows = cur.fetchall()
-
-        cur.close()
-        db.close()
+        rows = [
+            clean_document(row)
+            for row in rows
+        ]
 
         batches = {}
 
@@ -1489,7 +1619,8 @@ def fifo_api():
             name = row["name"].split(" ")[0]
 
             batches.setdefault(
-                name, []
+                name,
+                []
             ).append(row)
 
         fifo_list = []
@@ -1498,7 +1629,8 @@ def fifo_api():
 
             sorted_batches = sorted(
                 batch_group,
-                key=lambda x: x["expiry_date"]
+                key=lambda x:
+                    x["expiry_date"]
             )
 
             for i, batch in enumerate(
@@ -1506,12 +1638,16 @@ def fifo_api():
             ):
 
                 batch["fifo_order"] = i + 1
-                batch["sell_first"] = i == 0
+
+                batch["sell_first"] = (
+                    i == 0
+                )
 
                 fifo_list.append(batch)
 
         fifo_list.sort(
-            key=lambda x: x["expiry_date"]
+            key=lambda x:
+                x["expiry_date"]
         )
 
         return jsonify({
@@ -1545,7 +1681,10 @@ def old_api():
 if __name__ == "__main__":
 
     port = int(
-        os.environ.get("PORT", 5000)
+        os.environ.get(
+            "PORT",
+            5000
+        )
     )
 
     app.run(
