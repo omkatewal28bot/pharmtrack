@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>PharmTrack — Dashboard</title>
+
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+
+<nav>
+    <div class="nav-brand">
+        💊 PharmTrack
+    </div>
+
+    <div class="nav-links">
+        <a href="index.html" class="active">Dashboard</a>
+        <a href="add.html">+ Add</a>
+        <a href="distribute.html">Distribute</a>
+        <a href="states.html">States</a>
+        <a href="transfers.html">Transfers</a>
+        <a href="usability.html">Usability</a>
+        <a href="prediction.html">Prediction</a>
+        <a href="knowledge.html">Knowledge</a>
+        <a href="fifo.html">FIFO</a>
+    </div>
+</nav>
+
+
+<main class="container">
+
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-title">Medicine Dashboard</div>
+
+        <div class="page-sub">
+            Expiry prediction & inventory overview — India
+        </div>
+    </div>
+
+
+    <!-- Statistics -->
+    <div class="stats">
+
+        <div class="stat total">
+            <div class="lbl">Total</div>
+            <div class="val" id="total">0</div>
+
+            <div class="stat-bar">
+                <div class="stat-bar-fill"
+                     style="width:100%; background:var(--accent);">
+                </div>
+            </div>
+        </div>
+
+
+        <div class="stat expired">
+            <div class="lbl">Expired</div>
+            <div class="val" id="expired">0</div>
+
+            <div class="stat-bar">
+                <div id="expiredBar"
+                     class="stat-bar-fill"
+                     style="background:var(--expired);">
+                </div>
+            </div>
+        </div>
+
+
+        <div class="stat critical">
+            <div class="lbl">Critical</div>
+            <div class="val" id="critical">0</div>
+
+            <div class="stat-bar">
+                <div id="criticalBar"
+                     class="stat-bar-fill"
+                     style="background:var(--critical);">
+                </div>
+            </div>
+        </div>
+
+
+        <div class="stat warning">
+            <div class="lbl">Warning</div>
+            <div class="val" id="warning">0</div>
+
+            <div class="stat-bar">
+                <div id="warningBar"
+                     class="stat-bar-fill"
+                     style="background:var(--warning);">
+                </div>
+            </div>
+        </div>
+
+
+        <div class="stat safe">
+            <div class="lbl">Safe</div>
+            <div class="val" id="safe">0</div>
+
+            <div class="stat-bar">
+                <div id="safeBar"
+                     class="stat-bar-fill"
+                     style="background:var(--safe);">
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- Two Columns -->
+    <div class="two-col">
+
+        <!-- State Distribution -->
+        <div class="card">
+
+            <div class="card-head">
+
+                <h3>🗺️ State-wise Distribution</h3>
+
+                <a class="btn btn-ghost btn-sm"
+                   href="states.html">
+                    View All →
+                </a>
+
+            </div>
+
+
+            <div style="overflow-x:auto;">
+
+                <table>
+
+                    <thead>
+                        <tr>
+                            <th>State</th>
+                            <th>Medicines</th>
+                            <th>Total Qty</th>
+                        </tr>
+                    </thead>
+
+
+                    <tbody id="stateTable">
+
+                        <tr>
+                            <td colspan="3">
+
+                                <div class="empty">
+
+                                    <div class="empty-icon">
+                                        🗺️
+                                    </div>
+
+                                    <p>
+                                        Loading state data...
+                                    </p>
+
+                                </div>
+
+                            </td>
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+
+        <!-- Recent Transfers -->
+        <div class="card">
+
+            <div class="card-head">
+
+                <h3>🔄 Recent Transfers</h3>
+
+                <a class="btn btn-ghost btn-sm"
+                   href="transfers.html">
+                    View All →
+                </a>
+
+            </div>
+
+
+            <div style="overflow-x:auto;">
+
+                <table>
+
+                    <thead>
+                        <tr>
+                            <th>Medicine</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Qty</th>
+                        </tr>
+                    </thead>
+
+
+                    <tbody id="transferTable">
+
+                        <tr>
+                            <td colspan="4">
+
+                                <div class="empty">
+
+                                    <div class="empty-icon">
+                                        🔄
+                                    </div>
+
+                                    <p>
+                                        Loading transfers...
+                                    </p>
+
+                                </div>
+
+                            </td>
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- Inventory -->
+    <div class="card">
+
+        <div class="card-head">
+
+            <h3>
+                🗃️ Inventory
+                (<span id="inventoryCount">0</span> medicines)
+            </h3>
+
+            <input
+                type="text"
+                id="search"
+                class="search-input"
+                placeholder="🔍 Search medicines..."
+            >
+
+        </div>
+
+
+        <div style="overflow-x:auto;">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+                        <th>#</th>
+                        <th>Medicine</th>
+                        <th>Manufacturer</th>
+                        <th>Batch</th>
+                        <th>Category</th>
+                        <th>Expiry</th>
+                        <th>Days Left</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="medicineTable">
+
+                    <tr>
+
+                        <td colspan="11">
+
+                            <div class="empty">
+
+                                <div class="empty-icon">
+                                    💊
+                                </div>
+
+                                <p>
+                                    Loading medicines...
+                                </p>
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</main>
+
+
+<!-- JavaScript -->
+<script src="static/script.js"></script>
+
+</body>
+</html>
