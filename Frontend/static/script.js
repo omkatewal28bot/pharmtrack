@@ -1,144 +1,360 @@
 // ==========================================
 // PharmTrack - Netlify Frontend
+// MongoDB Atlas + Flask Backend
 // ==========================================
 
-// IMPORTANT:
-// Deploy hone ke baad yahan apna Render backend URL daalna.
-//
-// Example:
-// const API_BASE_URL = "https://pharmtrack-2.onrender.com";
+// ==========================================
+// BACKEND URL
+// ==========================================
 
 const API_BASE_URL = "https://pharmtrack-2.onrender.com";
 
 
 // ==========================================
-// Load Dashboard
+// API HELPER
+// ==========================================
+
+async function apiRequest(endpoint, options = {}) {
+
+    const url = `${API_BASE_URL}${endpoint}`;
+
+    console.log("API Request:", url);
+
+    try {
+
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                "Content-Type": "application/json",
+                ...(options.headers || {})
+            }
+        });
+
+        const contentType =
+            response.headers.get("content-type") || "";
+
+        let data;
+
+        if (contentType.includes("application/json")) {
+
+            data = await response.json();
+
+        } else {
+
+            const text = await response.text();
+
+            data = {
+                success: false,
+                message: text || "Server returned a non-JSON response"
+            };
+        }
+
+
+        console.log("API Response:", endpoint, data);
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.message ||
+                `Request failed with status ${response.status}`
+            );
+        }
+
+
+        return data;
+
+    } catch (error) {
+
+        console.error(
+            `API Error [${endpoint}]:`,
+            error
+        );
+
+        throw error;
+    }
+}
+
+
+// ==========================================
+// DASHBOARD
 // ==========================================
 
 async function loadDashboard() {
 
+    const medicineTable =
+        document.getElementById("medicineTable");
+
+    const stateTable =
+        document.getElementById("stateTable");
+
+    const transferTable =
+        document.getElementById("transferTable");
+
+
     try {
 
-        const response = await fetch(`${API_BASE_URL}/api/dashboard`);
+        if (medicineTable) {
 
-        if (!response.ok) {
-            throw new Error("Backend response error");
+            medicineTable.innerHTML = `
+                <tr>
+                    <td colspan="11">
+                        <div class="empty">
+                            <div class="empty-icon">⏳</div>
+                            <p>Loading medicines...</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
         }
 
-        const data = await response.json();
 
-        console.log("Dashboard data:", data);
-
-        // Statistics
-        document.getElementById("total").textContent =
-            data.stats.total;
-
-        document.getElementById("expired").textContent =
-            data.stats.expired;
-
-        document.getElementById("critical").textContent =
-            data.stats.critical;
-
-        document.getElementById("warning").textContent =
-            data.stats.warning;
-
-        document.getElementById("safe").textContent =
-            data.stats.safe;
-
-        document.getElementById("inventoryCount").textContent =
-            data.stats.total;
+        const data =
+            await apiRequest("/api/dashboard");
 
 
-        // Progress bars
-        updateBar("expiredBar", data.stats.expired, data.stats.total);
-        updateBar("criticalBar", data.stats.critical, data.stats.total);
-        updateBar("warningBar", data.stats.warning, data.stats.total);
-        updateBar("safeBar", data.stats.safe, data.stats.total);
+        console.log(
+            "Dashboard loaded successfully:",
+            data
+        );
 
 
-        // Tables
-        loadMedicines(data.medicines || []);
-        loadStates(data.states || []);
-        loadTransfers(data.transfers || []);
+        // ======================================
+        // CHECK RESPONSE
+        // ======================================
+
+        if (!data.success) {
+
+            throw new Error(
+                data.message ||
+                "Dashboard request failed"
+            );
+        }
+
+
+        // ======================================
+        // STATS
+        // ======================================
+
+        const stats = data.stats || {};
+
+        const total =
+            Number(stats.total) || 0;
+
+        const expired =
+            Number(stats.expired) || 0;
+
+        const critical =
+            Number(stats.critical) || 0;
+
+        const warning =
+            Number(stats.warning) || 0;
+
+        const safe =
+            Number(stats.safe) || 0;
+
+
+        setText("total", total);
+        setText("expired", expired);
+        setText("critical", critical);
+        setText("warning", warning);
+        setText("safe", safe);
+        setText("inventoryCount", total);
+
+
+        // ======================================
+        // PROGRESS BARS
+        // ======================================
+
+        updateBar(
+            "expiredBar",
+            expired,
+            total
+        );
+
+        updateBar(
+            "criticalBar",
+            critical,
+            total
+        );
+
+        updateBar(
+            "warningBar",
+            warning,
+            total
+        );
+
+        updateBar(
+            "safeBar",
+            safe,
+            total
+        );
+
+
+        // ======================================
+        // TABLES
+        // ======================================
+
+        loadMedicines(
+            Array.isArray(data.medicines)
+                ? data.medicines
+                : []
+        );
+
+
+        loadStates(
+            Array.isArray(data.states)
+                ? data.states
+                : []
+        );
+
+
+        loadTransfers(
+            Array.isArray(data.transfers)
+                ? data.transfers
+                : []
+        );
 
 
     } catch (error) {
 
-        console.error("Dashboard error:", error);
+        console.error(
+            "Dashboard error:",
+            error
+        );
 
-        document.getElementById("medicineTable").innerHTML = `
-            <tr>
-                <td colspan="11">
-                    <div class="empty">
-                        <div class="empty-icon">⚠️</div>
-                        <p>
-                            Unable to connect to backend.
-                        </p>
-                    </div>
-                </td>
-            </tr>
-        `;
 
-        document.getElementById("stateTable").innerHTML = `
-            <tr>
-                <td colspan="3">
-                    <div class="empty">
-                        <div class="empty-icon">⚠️</div>
-                        <p>Unable to load states.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
+        showTableError(
+            "medicineTable",
+            11,
+            "Unable to connect to backend.",
+            error.message
+        );
 
-        document.getElementById("transferTable").innerHTML = `
-            <tr>
-                <td colspan="4">
-                    <div class="empty">
-                        <div class="empty-icon">⚠️</div>
-                        <p>Unable to load transfers.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
+
+        showTableError(
+            "stateTable",
+            3,
+            "Unable to load states.",
+            error.message
+        );
+
+
+        showTableError(
+            "transferTable",
+            4,
+            "Unable to load transfers.",
+            error.message
+        );
     }
 }
 
 
 // ==========================================
-// Progress Bar
+// SAFE TEXT
 // ==========================================
 
-function updateBar(id, value, total) {
+function setText(id, value) {
 
-    const bar = document.getElementById(id);
+    const element =
+        document.getElementById(id);
+
+    if (!element) return;
+
+    element.textContent = value;
+}
+
+
+// ==========================================
+// TABLE ERROR
+// ==========================================
+
+function showTableError(
+    tableId,
+    colspan,
+    title,
+    message
+) {
+
+    const table =
+        document.getElementById(tableId);
+
+    if (!table) return;
+
+
+    table.innerHTML = `
+        <tr>
+            <td colspan="${colspan}">
+                <div class="empty">
+                    <div class="empty-icon">⚠️</div>
+                    <p>${escapeHTML(title)}</p>
+
+                    <small style="
+                        display:block;
+                        margin-top:6px;
+                        color:var(--muted);
+                    ">
+                        ${escapeHTML(message)}
+                    </small>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+
+// ==========================================
+// PROGRESS BAR
+// ==========================================
+
+function updateBar(
+    id,
+    value,
+    total
+) {
+
+    const bar =
+        document.getElementById(id);
 
     if (!bar) return;
 
+
     if (!total || total <= 0) {
+
         bar.style.width = "0%";
+
         return;
     }
 
-    const percentage = Math.min(
-        100,
-        Math.round((value / total) * 100)
-    );
 
-    bar.style.width = `${percentage}%`;
+    const percentage =
+        Math.min(
+            100,
+            Math.round(
+                (Number(value) / Number(total)) * 100
+            )
+        );
+
+
+    bar.style.width =
+        `${percentage}%`;
 }
 
 
 // ==========================================
-// Medicines Table
+// MEDICINES TABLE
 // ==========================================
 
 function loadMedicines(medicines) {
 
-    const table = document.getElementById("medicineTable");
+    const table =
+        document.getElementById("medicineTable");
 
     if (!table) return;
 
-    if (medicines.length === 0) {
+
+    if (!Array.isArray(medicines) ||
+        medicines.length === 0) {
 
         table.innerHTML = `
             <tr>
@@ -155,102 +371,184 @@ function loadMedicines(medicines) {
     }
 
 
-    table.innerHTML = medicines.map(m => {
+    table.innerHTML =
+        medicines.map(m => {
 
-        const days = Number(m.days ?? 0);
+            const id =
+                m.id ??
+                m._id ??
+                "";
 
-        const daysText =
-            days < 0
-                ? `${Math.abs(days)}d ago`
-                : `${days}d`;
+            const days =
+                Number(m.days ?? 0);
 
 
-        return `
-            <tr>
+            const daysText =
+                days < 0
+                    ? `${Math.abs(days)}d ago`
+                    : `${days}d`;
 
-                <td class="mono">
-                    ${escapeHTML(m.id)}
-                </td>
 
-                <td>
-                    <div class="name">
-                        ${escapeHTML(m.name)}
-                    </div>
-                </td>
+            const status =
+                String(
+                    m.status || "safe"
+                ).toLowerCase();
 
-                <td style="font-size:12px;color:var(--muted);">
-                    ${escapeHTML(m.manufacturer)}
-                </td>
 
-                <td class="mono">
-                    ${escapeHTML(m.batch_number)}
-                </td>
+            const quantity =
+                m.quantity ?? 0;
 
-                <td style="font-size:12px;color:var(--text2);">
-                    ${escapeHTML(m.category)}
-                </td>
 
-                <td class="mono">
-                    ${escapeHTML(m.expiry_date)}
-                </td>
+            const price =
+                m.unit_price ??
+                m.price ??
+                0;
 
-                <td>
-                    <span class="days ${escapeHTML(m.status)}">
-                        ${daysText}
-                    </span>
-                </td>
 
-                <td class="mono">
-                    ${escapeHTML(m.quantity)}
-                </td>
+            return `
+                <tr>
 
-                <td class="mono">
-                    ₹${escapeHTML(m.unit_price)}
-                </td>
+                    <td class="mono">
+                        ${escapeHTML(id)}
+                    </td>
 
-                <td>
-                    <span class="badge ${escapeHTML(m.status)}">
-                        ${escapeHTML(m.status)}
-                    </span>
-                </td>
 
-                <td>
-                    <div style="display:flex;gap:6px;">
+                    <td>
+                        <div class="name">
+                            ${escapeHTML(
+                                m.name || ""
+                            )}
+                        </div>
+                    </td>
 
-                        <button
-                            class="btn btn-ghost btn-sm"
-                            onclick="editMedicine(${Number(m.id)})">
-                            ✏️
-                        </button>
 
-                        <button
-                            class="btn btn-danger btn-sm"
-                            onclick="deleteMedicine(${Number(m.id)})">
-                            🗑️
-                        </button>
+                    <td style="
+                        font-size:12px;
+                        color:var(--muted);
+                    ">
+                        ${escapeHTML(
+                            m.manufacturer || ""
+                        )}
+                    </td>
 
-                    </div>
-                </td>
 
-            </tr>
-        `;
+                    <td class="mono">
+                        ${escapeHTML(
+                            m.batch_number || ""
+                        )}
+                    </td>
 
-    }).join("");
+
+                    <td style="
+                        font-size:12px;
+                        color:var(--text2);
+                    ">
+                        ${escapeHTML(
+                            m.category || ""
+                        )}
+                    </td>
+
+
+                    <td class="mono">
+                        ${escapeHTML(
+                            formatDate(
+                                m.expiry_date
+                            )
+                        )}
+                    </td>
+
+
+                    <td>
+
+                        <span class="
+                            days
+                            ${escapeHTML(status)}
+                        ">
+                            ${escapeHTML(daysText)}
+                        </span>
+
+                    </td>
+
+
+                    <td class="mono">
+                        ${escapeHTML(quantity)}
+                    </td>
+
+
+                    <td class="mono">
+                        ₹${escapeHTML(price)}
+                    </td>
+
+
+                    <td>
+
+                        <span class="
+                            badge
+                            ${escapeHTML(status)}
+                        ">
+                            ${escapeHTML(status)}
+                        </span>
+
+                    </td>
+
+
+                    <td>
+
+                        <div style="
+                            display:flex;
+                            gap:6px;
+                        ">
+
+                            <button
+                                class="btn btn-ghost btn-sm"
+                                onclick="
+                                    editMedicine(
+                                        '${escapeJS(id)}'
+                                    )
+                                "
+                                title="Edit"
+                            >
+                                ✏️
+                            </button>
+
+
+                            <button
+                                class="btn btn-danger btn-sm"
+                                onclick="
+                                    deleteMedicine(
+                                        '${escapeJS(id)}'
+                                    )
+                                "
+                                title="Delete"
+                            >
+                                🗑️
+                            </button>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+            `;
+
+        }).join("");
 }
 
 
 // ==========================================
-// State Table
+// STATES TABLE
 // ==========================================
 
 function loadStates(states) {
 
-    const table = document.getElementById("stateTable");
+    const table =
+        document.getElementById("stateTable");
 
     if (!table) return;
 
 
-    if (states.length === 0) {
+    if (!Array.isArray(states) ||
+        states.length === 0) {
 
         table.innerHTML = `
             <tr>
@@ -267,42 +565,63 @@ function loadStates(states) {
     }
 
 
-    table.innerHTML = states.map(s => `
+    table.innerHTML =
+        states.map(s => `
 
-        <tr>
+            <tr>
 
-            <td>
-                <div class="name">
-                    ${escapeHTML(s.state_name)}
-                </div>
-            </td>
+                <td>
 
-            <td class="mono">
-                ${escapeHTML(s.medicine_count)}
-            </td>
+                    <div class="name">
 
-            <td class="mono">
-                ${escapeHTML(s.total_qty)}
-            </td>
+                        ${escapeHTML(
+                            s.state_name || ""
+                        )}
 
-        </tr>
+                    </div>
 
-    `).join("");
+                </td>
+
+
+                <td class="mono">
+
+                    ${escapeHTML(
+                        s.medicine_count ?? 0
+                    )}
+
+                </td>
+
+
+                <td class="mono">
+
+                    ${escapeHTML(
+                        s.total_qty ?? 0
+                    )}
+
+                </td>
+
+            </tr>
+
+        `).join("");
 }
 
 
 // ==========================================
-// Transfers Table
+// TRANSFERS TABLE
 // ==========================================
 
 function loadTransfers(transfers) {
 
-    const table = document.getElementById("transferTable");
+    const table =
+        document.getElementById(
+            "transferTable"
+        );
 
     if (!table) return;
 
 
-    if (transfers.length === 0) {
+    if (!Array.isArray(transfers) ||
+        transfers.length === 0) {
 
         table.innerHTML = `
             <tr>
@@ -319,183 +638,450 @@ function loadTransfers(transfers) {
     }
 
 
-    table.innerHTML = transfers.map(t => `
+    table.innerHTML =
+        transfers.map(t => `
 
-        <tr>
+            <tr>
 
-            <td>
-                <div class="name" style="font-size:12px;">
-                    ${escapeHTML(t.medicine_name)}
-                </div>
-            </td>
+                <td>
 
-            <td class="mono">
-                ${escapeHTML(t.from_state)}
-            </td>
+                    <div
+                        class="name"
+                        style="font-size:12px;"
+                    >
+                        ${escapeHTML(
+                            t.medicine_name || ""
+                        )}
+                    </div>
 
-            <td class="mono">
-                ${escapeHTML(t.to_state)}
-            </td>
+                </td>
 
-            <td class="mono">
-                ${escapeHTML(t.quantity)}
-            </td>
 
-        </tr>
+                <td class="mono">
 
-    `).join("");
+                    ${escapeHTML(
+                        t.from_state || ""
+                    )}
+
+                </td>
+
+
+                <td class="mono">
+
+                    ${escapeHTML(
+                        t.to_state || ""
+                    )}
+
+                </td>
+
+
+                <td class="mono">
+
+                    ${escapeHTML(
+                        t.quantity ?? 0
+                    )}
+
+                </td>
+
+            </tr>
+
+        `).join("");
 }
 
 
 // ==========================================
-// Search
+// SEARCH
 // ==========================================
 
-const searchInput = document.getElementById("search");
+function setupSearch() {
 
-if (searchInput) {
+    const searchInput =
+        document.getElementById(
+            "search"
+        );
 
-    searchInput.addEventListener("input", function () {
+    if (!searchInput) return;
 
-        const query = this.value.toLowerCase().trim();
 
-        document
-            .querySelectorAll("#medicineTable tr")
-            .forEach(row => {
+    searchInput.addEventListener(
+        "input",
+        function () {
 
-                row.style.display =
-                    row.textContent.toLowerCase().includes(query)
-                        ? ""
-                        : "none";
+            const query =
+                this.value
+                    .toLowerCase()
+                    .trim();
 
-            });
 
-    });
+            document
+                .querySelectorAll(
+                    "#medicineTable tr"
+                )
+                .forEach(row => {
 
+                    const text =
+                        row.textContent
+                            .toLowerCase();
+
+
+                    row.style.display =
+                        text.includes(query)
+                            ? ""
+                            : "none";
+                });
+        }
+    );
 }
 
 
 // ==========================================
-// Edit Medicine
+// EDIT MEDICINE
 // ==========================================
 
 function editMedicine(id) {
 
-    window.location.href = `edit.html?id=${id}`;
+    if (
+        id === null ||
+        id === undefined ||
+        id === ""
+    ) {
 
+        alert(
+            "Invalid medicine ID."
+        );
+
+        return;
+    }
+
+
+    window.location.href =
+        `edit.html?id=${encodeURIComponent(id)}`;
 }
 
 
 // ==========================================
-// Delete Medicine
+// DELETE MEDICINE
 // ==========================================
 
 async function deleteMedicine(id) {
 
-    const confirmed = confirm(
-        "Delete this medicine? This cannot be undone."
-    );
+    if (
+        id === null ||
+        id === undefined ||
+        id === ""
+    ) {
+
+        alert(
+            "Invalid medicine ID."
+        );
+
+        return;
+    }
+
+
+    const confirmed =
+        confirm(
+            "Delete this medicine? This cannot be undone."
+        );
+
 
     if (!confirmed) return;
 
 
     try {
 
-        const response = await fetch(
-            `${API_BASE_URL}/api/medicines/${id}`,
-            {
-                method: "DELETE"
-            }
-        );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Delete request failed"
+        const data =
+            await apiRequest(
+                `/api/medicines/${encodeURIComponent(id)}`,
+                {
+                    method: "DELETE"
+                }
             );
 
+
+        if (!data.success) {
+
+            throw new Error(
+                data.message ||
+                "Delete failed"
+            );
         }
 
 
-        alert("Medicine deleted successfully.");
+        alert(
+            data.message ||
+            "Medicine deleted successfully."
+        );
 
-        loadDashboard();
+
+        await loadDashboard();
 
 
     } catch (error) {
 
-        console.error(error);
-
-        alert(
-            "Unable to delete medicine. Please try again."
+        console.error(
+            "Delete error:",
+            error
         );
 
-    }
 
+        alert(
+            `Unable to delete medicine.\n\n${error.message}`
+        );
+    }
 }
 
 
 // ==========================================
-// HTML Security
+// HTML SECURITY
 // ==========================================
 
 function escapeHTML(value) {
 
-    if (value === null || value === undefined) {
+    if (
+        value === null ||
+        value === undefined
+    ) {
+
         return "";
     }
 
+
     return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+
+        .replace(
+            /</g,
+            "&lt;"
+        )
+
+        .replace(
+            />/g,
+            "&gt;"
+        )
+
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
 
 
 // ==========================================
-// Count Animation
+// JAVASCRIPT STRING SECURITY
 // ==========================================
 
-function animateValue(element, target) {
+function escapeJS(value) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+
+        return "";
+    }
+
+
+    return String(value)
+        .replace(
+            /\\/g,
+            "\\\\"
+        )
+        .replace(
+            /'/g,
+            "\\'"
+        )
+        .replace(
+            /\r/g,
+            "\\r"
+        )
+        .replace(
+            /\n/g,
+            "\\n"
+        );
+}
+
+
+// ==========================================
+// DATE FORMAT
+// ==========================================
+
+function formatDate(value) {
+
+    if (!value) return "";
+
+
+    // MongoDB date object support
+    if (
+        typeof value === "object" &&
+        value.$date
+    ) {
+
+        value = value.$date;
+    }
+
+
+    const date =
+        new Date(value);
+
+
+    if (
+        isNaN(
+            date.getTime()
+        )
+    ) {
+
+        return String(value);
+    }
+
+
+    // Keep YYYY-MM-DD format
+    return date
+        .toISOString()
+        .split("T")[0];
+}
+
+
+// ==========================================
+// COUNT ANIMATION
+// ==========================================
+
+function animateValue(
+    element,
+    target
+) {
 
     if (!element) return;
 
-    target = Number(target) || 0;
+
+    target =
+        Number(target) || 0;
+
 
     let current = 0;
 
-    const step = Math.max(
-        1,
-        Math.ceil(target / 30)
-    );
 
-    const timer = setInterval(() => {
+    const step =
+        Math.max(
+            1,
+            Math.ceil(
+                target / 30
+            )
+        );
 
-        current += step;
 
-        if (current >= target) {
-            current = target;
-            clearInterval(timer);
-        }
+    const timer =
+        setInterval(() => {
 
-        element.textContent = current;
+            current += step;
 
-    }, 20);
+
+            if (
+                current >= target
+            ) {
+
+                current = target;
+
+                clearInterval(
+                    timer
+                );
+            }
+
+
+            element.textContent =
+                current;
+
+        }, 20);
 }
 
 
 // ==========================================
-// Start Dashboard
+// BACKEND HEALTH CHECK
+// ==========================================
+
+async function checkBackend() {
+
+    try {
+
+        const data =
+            await apiRequest(
+                "/api/health"
+            );
+
+
+        console.log(
+            "Backend health:",
+            data
+        );
+
+
+        if (data.success) {
+
+            console.log(
+                "✅ Backend + MongoDB connected"
+            );
+
+        } else {
+
+            console.warn(
+                "⚠️ Backend reachable but database error:",
+                data.message
+            );
+        }
+
+
+    } catch (error) {
+
+        console.error(
+            "❌ Backend health check failed:",
+            error
+        );
+    }
+}
+
+
+// ==========================================
+// START APPLICATION
 // ==========================================
 
 document.addEventListener(
     "DOMContentLoaded",
-    () => {
+    async () => {
 
-        loadDashboard();
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "PharmTrack Frontend Started"
+        );
+
+        console.log(
+            "Backend:",
+            API_BASE_URL
+        );
+
+        console.log(
+            "================================="
+        );
+
+
+        setupSearch();
+
+
+        await checkBackend();
+
+
+        await loadDashboard();
 
     }
 );
